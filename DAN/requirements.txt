@@ -3,5 +3,5 @@ torchvision
 matplotlib
 deeplake
 seaborn
-sklearn
+scikit-learn
 tqdm
