@@ -1,7 +1,5 @@
 torch
 torchvision
-argparse
-os
 matplotlib
 deeplake
 seaborn
