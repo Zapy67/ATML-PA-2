@@ -153,6 +153,7 @@ class MultilinearMap(nn.Module):
     Implements the multilinear conditioning: h ⊗ g where:
     - h: feature representation
     - g: classifier predictions (softmax probabilities)
+    - ⊗: Matrix Product
     
     This is the key component that makes CDAN "conditional" on predicted labels.
     """
