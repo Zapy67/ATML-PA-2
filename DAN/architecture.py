@@ -1,5 +1,4 @@
 import torch
-from torchvision.models import resnet152, ResNet152_Weights
 from torch import nn
 from utils import unfreeze_layers
 
@@ -70,10 +69,3 @@ class DANLoss(nn.Module):
             loss += self.supervised(logits, labels)     
             return loss   
 
-dan_resnet = resnet152(ResNet152_Weights.DEFAULT)
-dan_resnet.forward = _forward_impl
-
-for p in dan_resnet.parameters():
-     p.requires_grad = False
-
-unfreeze_layers(dan_resnet, ['layer3','layer4', 'fc' ])
