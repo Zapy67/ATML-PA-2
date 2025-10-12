@@ -47,7 +47,7 @@ def train_step(train_loaders, model, optimizer, loss_fn, accuracy_fn, device):
     return total_erm_loss / batch_idx, total_penalty / batch_idx, 
 
 
-def train(train_loaders, val_loader, epochs, optimizer, model, loss_fn, accuracy_fn, device):
+def train(train_loaders, val_loader, epochs, optimizer, model, loss_fn, accuracy_fn, scheduling_constant,device):
     model.to(device)
 
     train_accs = []
@@ -56,6 +56,7 @@ def train(train_loaders, val_loader, epochs, optimizer, model, loss_fn, accuracy
 
     for epoch in tqdm.trange(epochs, desc="Training"):
         print(f"\nEpoch {epoch+1}/{epochs}")
+        loss_fn.phi *= scheduling_constant
 
         avg_erm_loss, avg_penalty= train_step(
             train_loaders, model, optimizer, loss_fn, accuracy_fn, device
@@ -88,6 +89,7 @@ def train_workflow(model, src_datasets, tgt_dataset, config, device):
     batch_size     = config.get('batch_size', 32)
     momentum       = config.get('momentum', 0.0)
     phi          = config.get('phi', 0.5)
+    scheduling_constant = config.get('scheduling_constant', 1.5)
 
     loss_fn = IRMLoss(phi)
     optimizer = torch.optim.SGD(
@@ -112,6 +114,7 @@ def train_workflow(model, src_datasets, tgt_dataset, config, device):
         loss_fn=loss_fn,
         accuracy_fn=accuracy_fn,
         device=device
+        scheduling_constant=scheduling_constant,
     )
     
   
