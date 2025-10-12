@@ -24,8 +24,6 @@ def evaluate_ds(ds, model, device, domain_name=None, class_names=None):
 
     y_true = torch.cat(all_labels).numpy()
     y_pred = torch.cat(all_preds).numpy()
-    print(len(y_true))
-    print(len(y_pred))
 
     acc = accuracy_score(y_true, y_pred)
     cm = confusion_matrix(y_true, y_pred)
