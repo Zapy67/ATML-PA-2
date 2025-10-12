@@ -65,9 +65,12 @@ def train(source_loader, target_loader, test_loader, epochs, optimizer, model, l
     train_accs = []
     test_accs = []
 
+
+    
     for epoch in trange(epochs, desc="Training"):
-        print(f"\nEpoch {epoch+1}/{epochs}")
+        print(f"\nEpoch {epoch+1}/{epochs}")  
         loss_fn.scale = min(loss_fn.scale * 1.1, 128)
+        model.to(device)
 
         avg_loss, avg_supervised, avg_mkmmd, avg_acc = train_step(
             source_loader, target_loader, model, optimizer, loss_fn, accuracy_fn, device
