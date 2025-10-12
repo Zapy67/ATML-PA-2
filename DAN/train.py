@@ -61,7 +61,6 @@ def train(source_loader, target_loader, test_loader, epochs, optimizer, model, l
     for epoch in trange(epochs, desc="Training"):
         print(f"\nEpoch {epoch+1}/{epochs}")
         loss_fn.scale = min(loss_fn.scale * 1.1, 128)
-       
 
         avg_loss, avg_supervised, avg_mkmmd, avg_acc = train_step(
             source_loader, target_loader, model, optimizer, loss_fn, accuracy_fn, device
@@ -103,8 +102,8 @@ def train_workflow(model, src_dataset, tgt_dataset, val_dataset, config, device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum)
 
-    source_loader = torch.utils.data.DataLoader(src_dataset, batch_size, shuffle=True)
-    target_loader = torch.utils.data.DataLoader(tgt_dataset, batch_size, shuffle=True)
+    source_loader = torch.utils.data.DataLoader(src_dataset, batch_size, shuffle=True, drop_last=True)
+    target_loader = torch.utils.data.DataLoader(tgt_dataset, batch_size, shuffle=True, drop_last=True)
     test_loader   = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False)
     
     train(source_loader, target_loader, test_loader, epochs, optimizer, model, loss_fn, accuracy_fn, device)
