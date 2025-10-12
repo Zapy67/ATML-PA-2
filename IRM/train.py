@@ -91,10 +91,10 @@ def train_workflow(model, src_datasets, tgt_dataset, config, device):
 
     loss_fn = IRMLoss(phi)
     optimizer = torch.optim.SGD(
-        irm_resnet.parameters(),
-        lr=config.lr,
-        weight_decay=config.weight_decay,
-        momentum=config.momentum
+        model.parameters(),
+        lr=lr,
+        weight_decay=weight_decay,
+        momentum=momentum
     )
     source_loaders = []
     for ds in src_datasets:
@@ -116,60 +116,3 @@ def train_workflow(model, src_datasets, tgt_dataset, config, device):
     
   
 
-
-
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description="IRM Training Script")
-#     parser.add_argument("--epochs", type=int, default=5)
-#     parser.add_argument("--lr", type=float, default=1e-4)
-#     parser.add_argument("--weight_decay", type=float, default=0.0)
-#     parser.add_argument("--batch_size", type=int, default=32)
-#     parser.add_argument("--momentum", type=float, default=0.0)
-#     parser.add_argument("--save_path", type=str, default="irm_model.pth")
-#     parser.add_argument("--dataset", type=str, default="pacs")
-#     args = parser.parse_args()
-
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-#     source_loaders, target_loader = dataset.get_loaders("irm", pacs)
-
-#     loss_fn = CrossEntropyLoss(reduction="none")
-#     optimizer = torch.optim.SGD(
-#         irm_resnet.parameters(),
-#         lr=args.lr,
-#         weight_decay=args.weight_decay,
-#         momentum=args.momentum
-#     )
-
-#     train_accs, test_accs, erm_losses, penalties = train(
-#         source_loaders,
-#         target_loader,
-#         epochs=args.epochs,
-#         optimizer=optimizer,
-#         model=irm_resnet,
-#         loss_fn=loss_fn,
-#         accuracy_fn=accuracy_fn,
-#         device=device
-#     )
-
-#     # Plot training dynamics
-#     fig, axes = plt.subplots(1, 2, figsize=(10, 3))
-#     fig.suptitle("Training Dynamics")
-#     ax1, ax2 = axes
-
-#     ax1.set(title="Accuracies", xlabel="Epoch", ylabel="Accuracy")
-#     ax1.plot(train_accs, label="Source")
-#     ax1.plot(test_accs, label="Target")
-#     ax1.legend()
-#     ax1.grid(True)
-
-#     ax2.set(title="Source Losses", xlabel="Epoch", ylabel="Loss")
-#     ax2.plot(erm_losses, label="ERM Loss")
-#     ax2.plot(penalties, label="IRM Penalty")
-#     ax2.legend()
-#     ax2.grid(True)
-
-#     os.makedirs('figs', exist_ok=True)
-#     plt.savefig('figs/training_dynamics.png')
-#     torch.save(irm_resnet.state_dict(), args.save_path)
