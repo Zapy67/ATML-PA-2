@@ -24,10 +24,12 @@ def evaluate_ds(ds, model, device, domain_name=None, class_names=None):
 
     y_true = torch.cat(all_labels).numpy()
     y_pred = torch.cat(all_preds).numpy()
+    print(len(y_true))
+    print(len(y_pred))
 
     acc = accuracy_score(y_true, y_pred)
     cm = confusion_matrix(y_true, y_pred)
-    report = classification_report(y_true, y_pred, digits=4)
+    report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
 
     if domain_name:
         print(f"\n=== Evaluation for {domain_name} Domain ===")
