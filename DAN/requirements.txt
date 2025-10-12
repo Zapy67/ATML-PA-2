@@ -1,7 +1,0 @@
-torch
-torchvision
-matplotlib
-deeplake
-seaborn
-scikit-learn
-tqdm
