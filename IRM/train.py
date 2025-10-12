@@ -113,7 +113,7 @@ def train_workflow(model, src_datasets, tgt_dataset, config, device):
         model=model,
         loss_fn=loss_fn,
         accuracy_fn=accuracy_fn,
-        device=device
+        device=device,
         scheduling_constant=scheduling_constant,
     )
     
