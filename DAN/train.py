@@ -99,7 +99,7 @@ def train_workflow(model, src_dataset, tgt_dataset, val_dataset, config, device)
     sigmas         = config.get('sigmas', [1.0])
     scale          = config.get('scale', [1.0])
     
-    loss_fn = DANLoss(sigmas_=sigmas, scale=scale)
+    loss_fn = DANLoss(sigmas=sigmas, scale=scale)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=weight_decay, momentum=momentum)
 
