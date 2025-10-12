@@ -33,7 +33,7 @@ def evaluate_ds(ds, model, device, domain_name=None, class_names=None):
         print(f"\n=== Evaluation for {domain_name} Domain ===")
     print(f"Accuracy: {acc*100:.2f}%")
     print("Confusion Matrix:\n")
-    sns.heatmap(cm, annot=True, cmap="Blues")
+    sns.heatmap(cm, cmap="Blues")
     print("Classification Report:\n", report)
 
     return {
