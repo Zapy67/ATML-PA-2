@@ -1,10 +1,6 @@
 import torch
-from architecture import IRMLoss, irm_resnet
+from architecture import IRMLoss
 import tqdm
-import argparse
-import os
-import matplotlib.pyplot as plt
-from torch.nn import CrossEntropyLoss
 
 def accuracy_fn(data: torch.Tensor, labels: torch.Tensor):
     return torch.sum(data.argmax(dim=1) == labels)
