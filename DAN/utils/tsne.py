@@ -44,11 +44,6 @@ def tsne_plot(latents, labels, classes=None, ax=None, fig=None, num_samples=5000
     if fig is None or ax is None:
         fig, ax = plt.subplots(figsize=(8, 6))
 
-    scatter = ax.scatter(z_embed[:, 0], z_embed[:, 1], c=labels, cmap=[str(l) for l in labels], s=5, alpha=0.7)
-
-    cbar = plt.colorbar(scatter, ax=ax, ticks=range(len(classes) if classes else len(set(labels))))
-    if classes:
-        cbar.ax.set_yticklabels(classes)
-    cbar.set_label("Classes")
-
+    scatter = ax.scatter(z_embed[:, 0], z_embed[:, 1], c=labels, cmap=plt.cm.tab10 , s=5, alpha=0.7)
+    plt.legend()
     return fig, ax
