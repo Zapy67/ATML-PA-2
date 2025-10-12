@@ -80,7 +80,7 @@ def train(source_loader, target_loader, test_loader, epochs, optimizer, model, l
         train_accs.append(train_acc_source)
         
         test_accs.append(test_acc_target)
-        print(f"\nTrain loss: {avg_loss:.5f} | Supervised: {avg_supervised:.5f} | MK-MMD: {avg_mkmmd:.5f} | Source train acc: {train_acc_source*100:.2f}% | Target test acc={test_acc*100:.2f}%\n", flush=True)
+        print(f"\nTrain loss: {avg_loss:.5f} | Supervised: {avg_supervised:.5f} | MK-MMD: {avg_mkmmd:.5f} | Source train acc: {train_acc_source*100:.2f}% | Target test acc={test_acc_target*100:.2f}%\n", flush=True)
 
     return source_losses, supervised_losses, mkmmd_losses, train_accs, test_accs
 
