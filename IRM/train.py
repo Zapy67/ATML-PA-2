@@ -3,8 +3,7 @@ from architecture import IRMLoss
 import tqdm
 
 def accuracy_fn(data: torch.Tensor, labels: torch.Tensor):
-    return torch.sum(data.argmax(dim=1) == labels)
-
+    return torch.sum(data.argmax(dim=1) == labels).item()
 
 def loader_accuracy(loader, model, accuracy_fn, device):
     model.eval()
@@ -23,7 +22,6 @@ def train_step(train_loaders, model, optimizer, loss_fn, accuracy_fn, device):
     dummy_w = torch.nn.Parameter(torch.tensor([1.0])).to(device)
     total_erm_loss = 0.0
     total_penalty = 0.0
-    correct = 0
     total = 0
     batch_idx = 1
 
@@ -37,7 +35,6 @@ def train_step(train_loaders, model, optimizer, loss_fn, accuracy_fn, device):
             output = model(data)
             erm, penalty = loss_fn(output, target, dummy_w)
             error += erm
-            correct += accuracy_fn(output, target)
             total += len(output)
 
         (error + penalty).backward()
@@ -47,7 +44,7 @@ def train_step(train_loaders, model, optimizer, loss_fn, accuracy_fn, device):
         total_penalty += penalty.item()
         batch_idx += 1
 
-    return total_erm_loss / batch_idx, total_penalty / batch_idx, correct / total
+    return total_erm_loss / batch_idx, total_penalty / batch_idx, 
 
 
 def train(train_loaders, val_loader, epochs, optimizer, model, loss_fn, accuracy_fn, device):
@@ -74,8 +71,8 @@ def train(train_loaders, val_loader, epochs, optimizer, model, loss_fn, accuracy
         print(
             f'\tERM loss: {avg_erm_loss:.6f}\t'
             f'Grad penalty: {avg_penalty:.6f}\t'
-            f'Train Accuracy: {avg_acc:.4f}\t'
-            f'Test Accuracy: {test_acc:.4f}'
+            f'Train Accuracy: {100*avg_acc:.2f}\t'
+            f'Test Accuracy: {100*test_acc:.2f}'
         )
 
     return train_accs, test_accs, erm_losses, penalties
