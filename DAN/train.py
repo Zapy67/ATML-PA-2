@@ -71,8 +71,8 @@ def train(source_loader, target_loader, test_loader, epochs, optimizer, model, l
         avg_loss, avg_supervised, avg_mkmmd, = train_step(
             source_loader, target_loader, model, optimizer, loss_fn, accuracy_fn, device
         )
-        test_acc_target = evaluate_accuracy(test_loader, model, accuracy_fn, device)
-        train_acc_source = evaluate_accuracy(source_loader, model, accuracy_fn, device)
+        test_acc_target = evaluate_accuracy(test_loader, model,  device)
+        train_acc_source = evaluate_accuracy(source_loader, model, device)
 
         source_losses.append(avg_loss)
         supervised_losses.append(avg_supervised)
