@@ -12,10 +12,6 @@ from architecture import DANLoss
 # Utility Functions
 # --------------------------
 
-def set_bn_eval(m):
-    if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
-        m.eval()  # freeze running stats but still allows grad
-
 import torch
 from tqdm import trange
 
@@ -27,17 +23,13 @@ def train_step(source_loader, target_loader, model, optimizer, loss_fn, accuracy
     
     total_supervised = 0
     total_mkmmd = 0
-    correct = 0
-    
+   
     for (X_s, Y_s), (X_t, _) in zip(source_loader, target_loader):
         X_s, Y_s, X_t = X_s.to(device), Y_s.to(device), X_t.to(device)
         
         optimizer.zero_grad()
         logits, source_features = model(X_s)
-        
-        model.apply(set_bn_eval)
         _, target_features = model(X_t)
-        model.train() #makes it so we do not displace running statistics
         
         supervised, scaled_mkmmd = loss_fn(source_features, target_features, logits, Y_s)
         loss = supervised + scaled_mkmmd
@@ -46,16 +38,14 @@ def train_step(source_loader, target_loader, model, optimizer, loss_fn, accuracy
        
         total_supervised += supervised.item()
         total_mkmmd += scaled_mkmmd.item()
-        correct += accuracy_fn(logits, Y_s)
 
     n = len(source_loader.dataset)
     
     avg_supervised = total_supervised / n
     avg_mkmmd = total_mkmmd / n
     avg_loss = avg_supervised + avg_mkmmd
-    acc = correct / n
     
-    return avg_loss, avg_supervised, avg_mkmmd, acc
+    return avg_loss, avg_supervised, avg_mkmmd
 
 
 def train(source_loader, target_loader, test_loader, epochs, optimizer, model, loss_fn, accuracy_fn, device):
@@ -65,26 +55,24 @@ def train(source_loader, target_loader, test_loader, epochs, optimizer, model, l
     train_accs = []
     test_accs = []
 
-
-    
     for epoch in trange(epochs, desc="Training"):
         print(f"\nEpoch {epoch+1}/{epochs}")  
-        loss_fn.scale = min(loss_fn.scale * 1.1, 128)
+        loss_fn.scale = min(loss_fn.scale * 1.25, 512)
         model.to(device)
 
-        avg_loss, avg_supervised, avg_mkmmd, avg_acc = train_step(
+        avg_loss, avg_supervised, avg_mkmmd, = train_step(
             source_loader, target_loader, model, optimizer, loss_fn, accuracy_fn, device
         )
+        test_acc_target = evaluate_accuracy(test_loader, model, accuracy_fn, device)
+        train_acc_source = evaluate_accuracy(source_loader, model, accuracy_fn, device)
 
         source_losses.append(avg_loss)
         supervised_losses.append(avg_supervised)
         mkmmd_losses.append(avg_mkmmd)
-        train_accs.append(avg_acc)
-
-  
-        test_acc = evaluate_accuracy(test_loader, model, accuracy_fn, device)
-        test_accs.append(test_acc)
-        print(f"\nTrain loss: {avg_loss:.5f} | Supervised: {avg_supervised:.5f} | MK-MMD: {avg_mkmmd:.5f} | Source train acc: {avg_acc*100:.2f}% | Target test acc={test_acc*100:.2f}%\n", flush=True)
+        train_accs.append(train_acc_source)
+        
+        test_accs.append(test_acc_target)
+        print(f"\nTrain loss: {avg_loss:.5f} | Supervised: {avg_supervised:.5f} | MK-MMD: {avg_mkmmd:.5f} | Source train acc: {train_acc_source*100:.2f}% | Target test acc={test_acc*100:.2f}%\n", flush=True)
 
     return source_losses, supervised_losses, mkmmd_losses, train_accs, test_accs
 
