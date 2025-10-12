@@ -15,6 +15,14 @@ from architecture import DANLoss
 import torch
 from tqdm import trange
 
+from sklearn.metrics import (
+    confusion_matrix,
+    classification_report,
+    accuracy_score
+)
+import seaborn as sns
+
+
 def accuracy_fn(logits, labels):
     return (torch.argmax(logits, dim=1) == labels).sum().item()
 
@@ -76,16 +84,23 @@ def train(source_loader, target_loader, test_loader, epochs, optimizer, model, l
 
     return source_losses, supervised_losses, mkmmd_losses, train_accs, test_accs
 
-def evaluate_accuracy(loader, model, accuracy_fn, device):
+def evaluate_accuracy(loader, model, device):
     model.eval()
-    correct = total = 0
-    with torch.no_grad():
+    all_preds = []
+    all_labels = []
+
+    with torch.inference_mode():
         for X, Y in loader:
             X, Y = X.to(device), Y.to(device)
-            logits, _ = model(X)
-            correct += accuracy_fn(logits, Y)
-            total += Y.size(0)
-    return correct / total
+            logits = model(X)  
+            preds = torch.argmax(logits, dim=1)
+            all_preds.append(preds.cpu())
+            all_labels.append(Y.cpu())
+
+    y_true = torch.cat(all_labels).numpy()
+    y_pred = torch.cat(all_preds).numpy()
+
+    return accuracy_score(y_true, y_pred)
 
 def train_workflow(model, src_dataset, tgt_dataset, val_dataset, config, device):
     epochs         = config.get('epochs', 5)
