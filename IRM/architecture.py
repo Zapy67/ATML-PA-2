@@ -1,7 +1,6 @@
 import torch
 from torchvision.models import resnet50, ResNet50_Weights
 from torch import nn
-from utils import unfreeze_layers
 from torch.autograd import grad
 
 
