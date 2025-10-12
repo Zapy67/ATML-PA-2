@@ -57,15 +57,18 @@ def train(train_loaders, val_loader, epochs, optimizer, model, loss_fn, accuracy
     for epoch in tqdm.trange(epochs, desc="Training"):
         print(f"\nEpoch {epoch+1}/{epochs}")
 
-        avg_erm_loss, avg_penalty, avg_acc = train_step(
+        avg_erm_loss, avg_penalty= train_step(
             train_loaders, model, optimizer, loss_fn, accuracy_fn, device
         )
+        test_acc = loader_accuracy(val_loader, model, accuracy_fn, device)
+        accs = []
+        for loader in train_loaders:
+            accs.append(loader_accuracy(loader, model, accuracy_fn, device))
+        avg_acc = sum(accs)/len(accs)
 
         train_accs.append(avg_acc)
         erm_losses.append(avg_erm_loss)
         penalties.append(avg_penalty)
-
-        test_acc = loader_accuracy(val_loader, model, accuracy_fn, device)
         test_accs.append(test_acc)
 
         print(
