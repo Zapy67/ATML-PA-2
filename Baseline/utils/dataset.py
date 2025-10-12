@@ -76,7 +76,6 @@ class FeatureTensorDataset(torch.utils.data.Dataset):
             for imgs, lbls in tqdm(loader, desc=f"Precomputing up to {self.layer_name}"):
                 imgs = imgs.to(self.device)
                 outputs = self.feature_extractor(imgs)
-                print(outputs.device)
                 feats.append(outputs.cpu())
                 labels.append(lbls)
 
