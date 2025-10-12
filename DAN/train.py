@@ -11,42 +11,49 @@ from architecture import DANLoss
 # --------------------------
 # Utility Functions
 # --------------------------
+
+def set_bn_eval(m):
+    if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+        m.eval()  # freeze running stats but still allows grad
+
 import torch
 from tqdm import trange
 
 def accuracy_fn(logits, labels):
     return (torch.argmax(logits, dim=1) == labels).sum().item()
 
-
 def train_step(source_loader, target_loader, model, optimizer, loss_fn, accuracy_fn, device):
-    model.to(device)
     model.train()
     
-    total_loss = total_supervised = total_mkmmd = correct = 0
+    total_supervised = 0
+    total_mkmmd = 0
+    correct = 0
     
     for (X_s, Y_s), (X_t, _) in zip(source_loader, target_loader):
         X_s, Y_s, X_t = X_s.to(device), Y_s.to(device), X_t.to(device)
-        optimizer.zero_grad()
-      
-        logits, source_features = model(X_s)
-        _, target_features = model(X_t)
-      
-        supervised, scaled_mkmmd = loss_fn(source_features, target_features, logits, Y_s)
         
+        optimizer.zero_grad()
+        logits, source_features = model(X_s)
+        
+        model.apply(set_bn_eval)
+        _, target_features = model(X_t)
+        model.train() #makes it so we do not displace running statistics
+        
+        supervised, scaled_mkmmd = loss_fn(source_features, target_features, logits, Y_s)
         loss = supervised + scaled_mkmmd
         loss.backward()
         optimizer.step()
        
-        total_loss += loss.item()
         total_supervised += supervised.item()
         total_mkmmd += scaled_mkmmd.item()
         correct += accuracy_fn(logits, Y_s)
 
-    n_batches = len(source_loader)
-    avg_loss = total_loss / n_batches
-    avg_supervised = total_supervised / n_batches
-    avg_mkmmd = total_mkmmd / n_batches
-    acc = correct / len(source_loader.dataset)
+    n = len(source_loader.dataset)
+    
+    avg_supervised = total_supervised / n
+    avg_mkmmd = total_mkmmd / n
+    avg_loss = avg_supervised + avg_mkmmd
+    acc = correct / n
     
     return avg_loss, avg_supervised, avg_mkmmd, acc
 
