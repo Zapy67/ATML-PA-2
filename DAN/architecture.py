@@ -55,9 +55,9 @@ class DANLoss(nn.Module):
         def forward(self, source_features, target_features, logits, labels):
             scaled_mkmmd = 0
             for H_s, H_t in zip(source_features, target_features):
-                scaled_mkmmd += self.scale*self.mkmmd(H_s, H_t)
+                scaled_mkmmd += self.mkmmd(H_s, H_t)
             
             supervised = self.supervised(logits, labels) 
             
-            return supervised, scaled_mkmmd   
+            return supervised, self.scale*scaled_mkmmd   
             
