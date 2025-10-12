@@ -27,7 +27,7 @@ def evaluate_ds(ds, model, device, domain_name=None, class_names=None):
 
     acc = accuracy_score(y_true, y_pred)
     cm = confusion_matrix(y_true, y_pred)
-    report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
+    report = classification_report(y_true, y_pred, digits=4)
 
     if domain_name:
         print(f"\n=== Evaluation for {domain_name} Domain ===")

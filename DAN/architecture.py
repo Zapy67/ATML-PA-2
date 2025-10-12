@@ -50,7 +50,7 @@ class DANLoss(nn.Module):
             self.sigmas = sigmas
             self.scale = scale
             self.mkmmd = MKMMDLoss(sigmas)
-            self.supervised = torch.nn.CrossEntropyLoss()
+            self.supervised = torch.nn.CrossEntropyLoss(reduction='sum')
               
         def forward(self, source_features, target_features, logits, labels):
             scaled_mkmmd = 0
