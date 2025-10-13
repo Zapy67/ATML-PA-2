@@ -1,23 +1,13 @@
 import torch
-from torchvision.models import resnet152, ResNet152_Weights
 from torch import nn
-from utils import unfreeze_layers
+from torchvision.models import resnet50, ResNet50_Weights
 
-def _forward_impl(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
-
-        f1 = self.layer1(x)
-        f2 = self.layer2(f1)
-        f3 = self.layer3(f2)
-        f4 = self.layer4(f3)
-
-        x = torch.flatten(self.avgpool(f4), 1)
-        x = self.fc(x)
-
-        return x, [f3, f4]
+def resnet_classifier(num_classes, device='cpu'):
+    classifier = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+    num_features = classifier.fc.in_features
+    classifier.fc = nn.Linear(num_features, num_classes)
+    classifier.to(device)
+    return classifier
 
 class GaussianKernel(nn.Module):
     def __init__(self, sigma=1.0):
@@ -51,8 +41,8 @@ class MKMMDLoss(nn.Module):
                 k_st = k(xs1, xt2)
                 k_ts = k(xs2, xt1)
                 mmd2 += (k_ss + k_tt - k_st - k_ts).mean()
-
-            return 2 * mmd2  / len(self.sigmas_)
+            
+            return torch.clamp( 2* mmd2  / len(self.sigmas_), min=0)
         
 class DANLoss(nn.Module):
         def __init__(self, sigmas, scale):
@@ -60,20 +50,14 @@ class DANLoss(nn.Module):
             self.sigmas = sigmas
             self.scale = scale
             self.mkmmd = MKMMDLoss(sigmas)
-            self.supervised = torch.nn.CrossEntropyLoss()
+            self.supervised = torch.nn.CrossEntropyLoss(reduction='sum')
               
         def forward(self, source_features, target_features, logits, labels):
-            loss = 0
+            scaled_mkmmd = 0
             for H_s, H_t in zip(source_features, target_features):
-                loss += self.scale*self.mkmmd(H_s, H_t)
+                scaled_mkmmd += self.mkmmd(H_s, H_t)
             
-            loss += self.supervised(logits, labels)     
-            return loss   
-
-dan_resnet = resnet152(ResNet152_Weights.DEFAULT)
-dan_resnet.forward = _forward_impl
-
-for p in dan_resnet.parameters():
-     p.requires_grad = False
-
-unfreeze_layers(dan_resnet, ['layer3','layer4', 'fc' ])
+            supervised = self.supervised(logits, labels) 
+            
+            return supervised, self.scale*scaled_mkmmd   
+            
