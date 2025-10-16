@@ -36,8 +36,8 @@ def train_step(source_loader, target_loader, model, optimizer, loss_fn, accuracy
         X_s, Y_s, X_t = X_s.to(device), Y_s.to(device), X_t.to(device)
         
         optimizer.zero_grad()
-        logits, source_features = model(X_s)
-        _, target_features = model(X_t)
+        logits, source_features = model(X_s, return_features=True)
+        _, target_features = model(X_t, return_features=True)
         
         supervised, scaled_mkmmd = loss_fn(source_features, target_features, logits, Y_s)
         loss = supervised + scaled_mkmmd
@@ -122,6 +122,6 @@ def train_workflow(model, src_dataset, tgt_dataset, val_dataset, config, device)
     train(source_loader, target_loader, test_loader, epochs, optimizer, model, loss_fn, accuracy_fn, device)
 
     
-    
+
 
 
