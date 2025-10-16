@@ -91,9 +91,10 @@ def evaluate_accuracy(loader, model, device):
 
     with torch.no_grad():
         for X, Y in loader:
-            X, Y = X.to(device), Y.to(device)
-            import inspect
-            print(inspect.getsource(model.forward.__func__))
+            X = X.to(device)
+            Y = Y.to(device)
+
+            print(model)
             logits= model(X)  
             preds = torch.argmax(logits, dim=1)
             all_preds.append(preds.cpu())
