@@ -13,15 +13,15 @@ from torchvision import models
 from typing import Tuple, Optional, Dict
 import numpy as np
 from tqdm import tqdm
-from sklearn.metrics import (
-    confusion_matrix,
-    classification_report,
-    accuracy_score
-)
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
-import seaborn as sns
-import matplotlib.pyplot as plt
+# from sklearn.metrics import (
+#     confusion_matrix,
+#     classification_report,
+#     accuracy_score
+# )
+# from sklearn.manifold import TSNE
+# from sklearn.decomposition import PCA
+# import seaborn as sns
+# import matplotlib.pyplot as plt
 
 from utils.architecture import GradientReversalLayer, ClassificationHead, ResNet50FeatureExtractor
 
@@ -76,7 +76,6 @@ class DANN(nn.Module):
         freeze_backbone: bool = False,
         class_head_dims: list = None,
         domain_discriminator_dims: list = [1024, 512],
-        dropout: float = 0.5
     ):
         super(DANN, self).__init__()
         
@@ -134,15 +133,15 @@ class DANN(nn.Module):
     def predict(self, x):
         """Predict class labels only (for inference)"""
         features = self.feature_extractor(x)
-        return self.v(features)
+        return self.class_head(features)
     
-    def unfreeze_backbone(self):
-        """Unfreeze ResNet-50 backbone for fine-tuning"""
-        self.feature_extractor.unfreeze()
+    # def unfreeze_backbone(self):
+    #     """Unfreeze ResNet-50 backbone for fine-tuning"""
+    #     self.feature_extractor.unfreeze()
     
-    def freeze_backbone(self):
-        """Freeze ResNet-50 backbone"""
-        self.feature_extractor.freeze()
+    # def freeze_backbone(self):
+    #     """Freeze ResNet-50 backbone"""
+    #     self.feature_extractor.freeze()
 
 
 # ============================================================================
@@ -203,8 +202,8 @@ class DANNTrainer:
             'train_total_loss': [],
             'train_class_acc': [],
             'train_domain_acc': [],
-            'val_class_loss': [],
-            'val_class_acc': []
+            'target_class_loss': [],
+            'target_class_acc': []
         }
     
     @staticmethod
@@ -212,20 +211,20 @@ class DANNTrainer:
         """
         Accepts batches that can be (imgs, labels) or (imgs, labels, domains).
         Returns imgs, labels, domains_or_none
+        
         """
-        if len(batch) == 2:
-            imgs, labels = batch
-            domains = None
-        elif len(batch) == 3:
-            imgs, labels, domains = batch
+        # Handle standard tuple format
+        if isinstance(batch, (tuple, list)):
+            if len(batch) == 2:
+                imgs, labels = batch
+                domains = None
+            elif len(batch) == 3:
+                imgs, labels, domains = batch
+            else:
+                raise ValueError(f"Unsupported batch format with {len(batch)} elements")
         else:
-            # handle nested tuples: sometimes DataLoader returns ((imgs, labels), domains) etc.
-            # try flattening heuristically
-            try:
-                imgs, labels = batch[0], batch[1]
-                domains = batch[2] if len(batch) > 2 else None
-            except Exception:
-                raise ValueError("Unsupported batch format")
+            raise ValueError(f"Batch must be tuple or list, got {type(batch)}")
+        
         return imgs, labels, domains
     
     def train_step(
@@ -249,9 +248,13 @@ class DANNTrainer:
         """
         self.model.train()
         self.optimizer.zero_grad()
-        
-        batch_size = source_data.size(0)
-        
+
+        assert source_data.dim() == 4, f"Expected 4D source_data, got {source_data.dim()}D"
+        assert target_data.dim() == 4, f"Expected 4D target_data, got {target_data.dim()}D"
+        assert source_labels.dim() == 1, f"Expected 1D source_labels, got {source_labels.dim()}D"
+        assert source_data.size(0) == source_labels.size(0), \
+            f"Batch size mismatch: source_data={source_data.size(0)}, source_labels={source_labels.size(0)}"
+                
         # move
         source_data = source_data.to(self.device)
         source_labels = source_labels.to(self.device)
@@ -265,13 +268,19 @@ class DANNTrainer:
         class_out_s, domain_out_s, _ = self.model(source_data, alpha)
         _, domain_out_t, _ = self.model(target_data, alpha)
 
+        assert class_out_s.size(0) == source_data.size(0), \
+            f"Class output batch size mismatch: {class_out_s.size(0)} != {source_data.size(0)}"
+        assert domain_out_s.size() == (source_data.size(0), 2), \
+            f"Domain output shape mismatch: {domain_out_s.size()} != ({source_data.size(0)}, 2)"
+        assert domain_out_t.size() == (target_data.size(0), 2), \
+            f"Domain output shape mismatch: {domain_out_t.size()} != ({target_data.size(0)}, 2)"
+
+
         # losses
         class_loss = self.class_criterion(class_out_s, source_labels)
-        
         dom_loss_s = self.domain_criterion(domain_out_s, domain_labels_source)
         dom_loss_t = self.domain_criterion(domain_out_t, domain_labels_target)
         domain_loss = dom_loss_s + dom_loss_t
-
         total_loss = class_loss + domain_loss
 
         total_loss.backward()
@@ -314,19 +323,19 @@ class DANNTrainer:
                 imgs = imgs.to(self.device)
                 labels = labels.to(self.device)
 
-                # forward: set alpha = 0 for evaluation (no GRL effect)
-                try:
-                    class_logits, _, feats = self.model(imgs, 0.0)
-                except Exception:
-                    # fallback: maybe model(imgs) returns class logits and features differently
-                    out = self.model(imgs)
-                    # try to guess
-                    if isinstance(out, tuple) and len(out) >= 1:
-                        class_logits = out[0]
-                        feats = out[-1] if len(out) > 1 else None
-                    else:
-                        class_logits = out
-                        feats = None
+                # Forward: alpha = 0 disables adversarial effect for evaluation
+                out = self.model(imgs, 0.0)
+
+                # Validate output format
+                if not isinstance(out, tuple) or len(out) < 1:
+                    raise ValueError(f"Expected tuple output from model, got {type(out)}")
+                
+                class_logits = out[0]
+                feats = out[2] if len(out) > 2 else None  # Features are 3rd element
+
+                # Validate dimensions
+                assert class_logits.size(0) == imgs.size(0), \
+                    f"Output batch size mismatch: {class_logits.size(0)} != {imgs.size(0)}"
 
                 loss = self.class_criterion(class_logits, labels)
                 losses.append(loss.item())
@@ -338,10 +347,13 @@ class DANNTrainer:
                 if return_features and feats is not None:
                     features_list.append(feats.detach().cpu())
 
+        if len(y_true) == 0:
+            return {'loss': None, 'accuracy': None, 'y_true': np.array([]), 'y_pred': np.array([]), 'features': None}
+
         y_true = torch.cat(y_true).numpy()
         y_pred = torch.cat(y_pred).numpy()
         avg_loss = float(np.mean(losses)) if len(losses) > 0 else None
-        acc = float(accuracy_score(y_true, y_pred)) if len(y_true) > 0 else None
+        acc = float((y_true == y_pred).mean()) if len(y_true) > 0 else None
 
         features_np = None
         if return_features and len(features_list) > 0:
@@ -374,7 +386,6 @@ class DANNTrainer:
             verbose: Whether to print progress
         """
         for epoch in range(num_epochs):
-            # Compute lambda schedule
             alpha = compute_lambda_schedule(epoch, num_epochs, self.gamma)
             
             epoch_metrics = {
@@ -391,7 +402,10 @@ class DANNTrainer:
             # Training loop
             pbar = tqdm(source_loader, desc=f'Epoch {epoch+1}/{num_epochs}') if verbose else source_loader
             
-            for source_data, source_labels, domain in pbar:
+            for batch in pbar:
+                # unpack source batch properly
+                source_imgs, source_labels, _ = self._unpack_batch(batch)
+
                 # get matching target batch (cycle if needed)
                 try:
                     t_batch = next(target_iter)
@@ -399,14 +413,19 @@ class DANNTrainer:
                     target_iter = iter(target_loader)
                     t_batch = next(target_iter)
                 target_imgs, _, _ = self._unpack_batch(t_batch)
-                
-                # match sizes
-                min_b = min(source_imgs.size(0), target_imgs.size(0))
-                source_imgs = source_imgs[:min_b]
-                source_labels = source_labels[:min_b]
-                target_imgs = target_imgs[:min_b]
 
-                metrics = self.train_step(source_imgs, source_labels, target_imgs, alpha)
+                # match sizes and move to device
+                min_b = min(source_imgs.size(0), target_imgs.size(0))
+                source_imgs_b = source_imgs[:min_b]
+                source_labels_b = source_labels[:min_b]
+                target_imgs_b = target_imgs[:min_b]
+
+                # Move
+                source_imgs_b = source_imgs_b.to(self.device)
+                source_labels_b = source_labels_b.to(self.device)
+                target_imgs_b = target_imgs_b.to(self.device)
+
+                metrics = self.train_step(source_imgs_b, source_labels_b, target_imgs_b, alpha)
 
                 # accumulate
                 for k, v in metrics.items():
@@ -420,7 +439,7 @@ class DANNTrainer:
                         'alpha': f"{alpha:.4f}"
                     })
 
-            # epoch averages
+            # Epoch averages
             for k in epoch_metrics:
                 avg_val = float(np.mean(epoch_metrics[k])) if len(epoch_metrics[k]) > 0 else None
                 self.history[f'train_{k}'].append(avg_val)
@@ -439,176 +458,244 @@ class DANNTrainer:
 
     def analysis(
         self,
-        loader: torch.utils.data.DataLoader,
+        domain_loaders: Dict[str, DataLoader],
+        source_domains: list,
+        target_domains: list,
         class_names: Optional[list] = None,
         tsne_perplexity: int = 30,
         tsne_samples: Optional[int] = 2000,
         pca_before_tsne: bool = True,
         random_state: int = 0,
-        color_by: str = 'class',  # 'class' or 'domain'
-        domain_map: Optional[Dict] = None
+        normalize_cm: bool = True,
     ):
         """
-        Detailed analysis:
-        - computes predictions on the provided loader
-        - prints accuracy, classification report
-        - plots confusion matrix
-        - extracts features and runs t-SNE (optionally pre-reduced by PCA) and plots clusters
-        color_by: whether to color t-SNE by 'class' or 'domain' (loader must provide domain indices, domain map provides name mapping)
+        Analysis across multiple domain dataloaders.
+
+        Args:
+            domain_loaders: dict mapping domain_name -> DataLoader
+            source_domains: list of domain_name(s) considered "source" (for t-SNE grouping)
+            target_domains: list of domain_name(s) considered "target" (for t-SNE grouping)
+            class_names: optional list of class names (for readable reports and CM ticks)
+            tsne_perplexity, tsne_samples, pca_before_tsne, random_state: TSNE options
+            normalize_cm: if True, show confusion matrix as row-normalized (per-true-class rates)
+
+        Returns:
+            results: dict with keys:
+                'per_domain_report' : {domain_name: classification_report(str)}
+                'per_domain_cm'     : {domain_name: confusion_matrix (np.array)}
+                'tsne'              : { 'embeddings': np.array (N,2), 'domains': list(domain_names), 'labels': np.array(classes) }
         """
+        from sklearn.metrics import classification_report, confusion_matrix
+        from sklearn.manifold import TSNE
+        from sklearn.decomposition import PCA
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import numpy as np
+        import torch
 
-        # 1) Get preds, true labels, features, and domains (if present)
         self.model.eval()
-        y_true = []
-        y_pred = []
-        feats_list = []
-        domains = []
 
-        with torch.no_grad():
-            pbar = tqdm(loader, desc="Collecting features", leave=False)
-            for batch in pbar:
-                imgs, labels, doms = self._unpack_batch(batch)
-                imgs = imgs.to(self.device)
-                labels = labels.to(self.device)
+        per_domain_report = {}
+        per_domain_cm = {}
+        features_by_domain = {}
+        ytrue_by_domain = {}
+        ypred_by_domain = {}
 
-                # forward
-                try:
-                    class_logits, _, feats = self.model(imgs, 0.0)
-                except Exception:
-                    out = self.model(imgs)
+        # 1) Collect predictions, labels, and features per-domain
+        for domain_name, loader in domain_loaders.items():
+            y_true = []
+            y_pred = []
+            feats_list = []
+
+            with torch.no_grad():
+                pbar = tqdm(loader, desc=f"Collecting [{domain_name}]", leave=False)
+                for batch in pbar:
+                    imgs, labels, *rest = batch if len(batch) >= 2 else (batch[0], batch[1])
+                    imgs = imgs.to(self.device)
+                    labels = labels.to(self.device)
+
+                    out = self.model(imgs, 0.0)
                     if isinstance(out, tuple):
                         class_logits = out[0]
-                        feats = out[-1] if len(out) > 1 else None
+                        feats = out[2] if len(out) > 2 else None  # 3rd element
                     else:
                         class_logits = out
                         feats = None
 
-                preds = torch.argmax(class_logits, dim=1)
+                    preds = torch.argmax(class_logits, dim=1)
 
-                y_true.append(labels.cpu())
-                y_pred.append(preds.cpu())
-                if feats is not None:
-                    feats_list.append(feats.detach().cpu())
+                    y_true.append(labels.cpu())
+                    y_pred.append(preds.cpu())
+                    if feats is not None:
+                        feats_list.append(feats.detach().cpu())
 
-                # collect domains if available
-                if doms is not None:
-                    domains.append(doms.cpu())
-                else:
-                    domains.append(torch.full_like(labels.cpu(), -1))
+            if len(y_true) == 0:
+                # empty loader
+                per_domain_report[domain_name] = "EMPTY_LOADER"
+                per_domain_cm[domain_name] = None
+                features_by_domain[domain_name] = None
+                ytrue_by_domain[domain_name] = np.array([])
+                ypred_by_domain[domain_name] = np.array([])
+                continue
 
-        if len(y_true) == 0:
-            print("No data collected from loader.")
-            return
+            y_true = torch.cat(y_true).numpy()
+            y_pred = torch.cat(y_pred).numpy()
+            ytrue_by_domain[domain_name] = y_true
+            ypred_by_domain[domain_name] = y_pred
 
-        y_true = torch.cat(y_true).numpy()
-        y_pred = torch.cat(y_pred).numpy()
-        all_domains = torch.cat(domains).numpy() if len(domains) > 0 else None
-        features_np = np.concatenate([f.numpy() if isinstance(f, torch.Tensor) else f for f in feats_list], axis=0) if len(feats_list) > 0 else None
-
-        # 2) Print metrics
-        acc = accuracy_score(y_true, y_pred)
-        print(f"Overall Accuracy: {acc*100:.2f}%")
-        if class_names is None:
-            print(classification_report(y_true, y_pred, digits=4))
-        else:
-            print(classification_report(y_true, y_pred, target_names=class_names, digits=4))
-
-        # 3) Confusion matrix (Need per Domain as well)
-        cm = confusion_matrix(y_true, y_pred)
-        plt.figure(figsize=(10,8))
-        sns.heatmap(cm, cmap="Blues", fmt="d")
-        plt.title("Confusion Matrix")
-        plt.xlabel("Predicted")
-        plt.ylabel("True")
-        plt.show()
-
-        # 4) t-SNE / PCA visualization (if features available)
-        if features_np is not None:
-            # sub-sample for speed if requested
-            n_total = features_np.shape[0]
-            if tsne_samples is None or tsne_samples >= n_total:
-                idxs = np.arange(n_total)
+            # features
+            if len(feats_list) > 0:
+                feats_np = torch.cat(feats_list).numpy()
+                features_by_domain[domain_name] = feats_np
             else:
-                rng = np.random.RandomState(random_state)
-                idxs = rng.choice(n_total, tsne_samples, replace=False)
-            feats_sub = features_np[idxs]
-            labels_sub = y_true[idxs]
-            domains_sub = all_domains[idxs] if all_domains is not None else None
+                features_by_domain[domain_name] = None
 
-            # optionally PCA reduce to 50 dims before TSNE
-            if pca_before_tsne and feats_sub.shape[1] > 50:
-                pca = PCA(n_components=50, random_state=random_state)
-                feats_sub = pca.fit_transform(feats_sub)
-
-            tsne = TSNE(n_components=2, perplexity=tsne_perplexity, init='pca', random_state=random_state)
-            tsne_proj = tsne.fit_transform(feats_sub)
-
-            plt.figure(figsize=(10,8))
-            if color_by == 'class':
-                sc = plt.scatter(tsne_proj[:,0], tsne_proj[:,1], c=labels_sub, cmap='tab20', s=6)
-                plt.title("t-SNE of features (colored by class)")
-                plt.colorbar(sc, label='class id')
+            # classification report
+            if class_names is not None:
+                report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
             else:
-                # color by domain
-                if domains_sub is None:
-                    print("No domain information available for coloring by domain.")
-                else:
-                    sc = plt.scatter(tsne_proj[:,0], tsne_proj[:,1], c=domains_sub, cmap='tab10', s=6)
-                    plt.title("t-SNE of features (colored by domain)")
-                    plt.colorbar(sc, label='domain id')
+                report = classification_report(y_true, y_pred, digits=4)
+            per_domain_report[domain_name] = report
+
+            # confusion matrix
+            # choose label order: if class_names provided, use range(len(class_names))
+            if class_names is not None:
+                labels = list(range(len(class_names)))
+            else:
+                # attempt to include all classes present in y_true or y_pred
+                labels = np.arange(0, max(y_true.max() if y_true.size else 0, y_pred.max() if y_pred.size else 0) + 1)
+                if labels.size == 0:
+                    labels = np.array([0])
+
+            cm = confusion_matrix(y_true, y_pred, labels=labels)
+            if normalize_cm:
+                # normalize rows (true class -> predicted distribution)
+                row_sums = cm.sum(axis=1, keepdims=True).astype(np.float32)
+                row_sums[row_sums == 0] = 1.0
+                cm_display = cm.astype(np.float32) / row_sums
+            else:
+                cm_display = cm
+
+            per_domain_cm[domain_name] = cm  # store raw cm
+
+            # plot heatmap
+            plt.figure(figsize=(6,5))
+            sns.heatmap(cm_display, annot=True, fmt='.2f' if normalize_cm else 'd',
+                        xticklabels=(class_names if class_names is not None else labels),
+                        yticklabels=(class_names if class_names is not None else labels),
+                        cmap='Blues')
+            plt.title(f'Confusion Matrix ({domain_name})')
+            plt.xlabel('Predicted')
+            plt.ylabel('True')
+            plt.tight_layout()
             plt.show()
 
+            # print report
+            print(f"\n=== Classification report for domain: {domain_name} ===")
+            print(report)
+
+        # 2) t-SNE comparing source vs target domains
+        # Validate provided domain names
+        all_domain_names = list(domain_loaders.keys())
+        for name in list(source_domains) + list(target_domains):
+            if name not in domain_loaders:
+                raise ValueError(f"Domain '{name}' not present in domain_loaders keys: {all_domain_names}")
+
+        # Build features and labels for t-SNE. We'll sample to tsne_samples per entire plot.
+        tsne_feats = []
+        tsne_domain_labels = []
+        tsne_class_labels = []
+
+        # helper: sample from each domain up to per_domain_quota
+        total_domains = len(source_domains) + len(target_domains)
+        if tsne_samples is None or tsne_samples <= 0:
+            per_domain_quota = None
         else:
-            print("No feature vectors available from model to run t-SNE. Ensure your model returns features as 3rd output.")
+            per_domain_quota = max(1, tsne_samples // max(1, total_domains))
 
+        rng = np.random.RandomState(random_state)
 
-# ============================================================================
-# Example Usage
-# ============================================================================
+        def gather_for_names(names, tag):
+            # tag is string like 'source' or 'target' to help in plotting legend
+            for dname in names:
+                feats = features_by_domain.get(dname, None)
+                y_true = ytrue_by_domain.get(dname, None)
+                if feats is None or feats.size == 0:
+                    continue
+                n = feats.shape[0]
+                if per_domain_quota is None:
+                    idxs = np.arange(n)
+                else:
+                    if n <= per_domain_quota:
+                        idxs = np.arange(n)
+                    else:
+                        idxs = rng.choice(n, per_domain_quota, replace=False)
+                tsne_feats.append(feats[idxs])
+                tsne_domain_labels += [(dname, tag)] * len(idxs)
+                if y_true is not None and y_true.size > 0:
+                    tsne_class_labels.append(y_true[idxs])
+                else:
+                    tsne_class_labels.append(np.full(len(idxs), -1, dtype=int))
 
-if __name__ == "__main__":
-    # Example parameters for image classification
-    num_classes = 10  # e.g., 10 classes for digit recognition
-    batch_size = 32
-    num_epochs = 50
-    
-    # Create model with ResNet-50 backbone
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = DANN(
-        num_classes=num_classes,
-        pretrained=True,
-        freeze_backbone=True,  # Frozen ResNet-50
-        label_predictor_dims=[512, 256],  # Additional layers after ResNet
-        domain_discriminator_dims=[1024, 512]
-    )
-    
-    # Create trainer
-    trainer = DANNTrainer(
-        model=model,
-        device=device,
-        learning_rate=1e-3,
-        weight_decay=5e-4,
-        gamma=10.0
-    )
-    
-    print("DANN model with ResNet-50 backbone initialized successfully!")
-    print(f"Feature extractor output dim: {model.feature_extractor.output_dim}")
-    
-    # Count trainable vs frozen parameters
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total_params = sum(p.numel() for p in model.parameters())
-    frozen_params = total_params - trainable_params
-    
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
-    print(f"Frozen parameters (ResNet-50): {frozen_params:,}")
-    print(f"Device: {device}")
-    
-    # Example: Create dummy data to test the model
-    dummy_input = torch.randn(4, 3, 224, 224).to(device)  # 4 images, 3 channels, 224x224
-    class_out, domain_out, features = model(dummy_input, alpha=0.5)
-    print(f"\nTest forward pass:")
-    print(f"Input shape: {dummy_input.shape}")
-    print(f"Features shape: {features.shape}")
-    print(f"Class output shape: {class_out.shape}")
-    print(f"Domain output shape: {domain_out.shape}")
+        gather_for_names(source_domains, 'source')
+        gather_for_names(target_domains, 'target')
+
+        if len(tsne_feats) == 0:
+            print("No features available for t-SNE (ensure model returns features during inference).")
+            tsne_result = {'embeddings': None, 'domains': None, 'labels': None}
+        else:
+            X = np.vstack(tsne_feats)
+            domain_meta = tsne_domain_labels  # list of (domain_name, 'source'/'target') repeated per sample
+            class_meta = np.concatenate(tsne_class_labels)
+
+            # optional PCA
+            if pca_before_tsne and X.shape[1] > 50:
+                pca = PCA(n_components=50, random_state=random_state)
+                X_reduced = pca.fit_transform(X)
+            else:
+                X_reduced = X
+
+            tsne = TSNE(n_components=2, perplexity=tsne_perplexity, init='pca', random_state=random_state)
+            emb = tsne.fit_transform(X_reduced)
+
+            # build arrays for plotting
+            domain_names = [d for (d, tag) in domain_meta]
+            domain_tags = [tag for (d, tag) in domain_meta]
+            unique_domains = list(dict.fromkeys(domain_names))  # preserve order
+            unique_tags = ['source', 'target']
+
+            # color by domain name
+            palette = sns.color_palette('tab10', n_colors=max(10, len(unique_domains)))
+            domain_to_color = {d: palette[i % len(palette)] for i, d in enumerate(unique_domains)}
+            tag_to_marker = {'source': 'o', 'target': 'X'}
+
+            plt.figure(figsize=(10, 8))
+            for i in range(emb.shape[0]):
+                dn = domain_names[i]
+                tag = domain_tags[i]
+                plt.scatter(emb[i,0], emb[i,1], marker=tag_to_marker[tag], color=domain_to_color[dn], s=12, alpha=0.8)
+
+            # build legend handles
+            import matplotlib.patches as mpatches
+            from matplotlib.lines import Line2D
+            domain_handles = [mpatches.Patch(color=domain_to_color[d], label=d) for d in unique_domains]
+            tag_handles = [Line2D([0],[0], marker=tag_to_marker[t], color='w', markerfacecolor='k', markersize=8, label=t) for t in unique_tags]
+            plt.legend(handles=domain_handles + tag_handles, bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.title(f"t-SNE of features: sources={source_domains}  targets={target_domains}")
+            plt.tight_layout()
+            plt.show()
+
+            tsne_result = {
+                'embeddings': emb,
+                'domain_names': domain_names,
+                'domain_tags': domain_tags,
+                'class_labels': class_meta
+            }
+
+        results = {
+            'per_domain_report': per_domain_report,
+            'per_domain_cm': per_domain_cm,
+            'tsne': tsne_result
+        }
+
+        return results
