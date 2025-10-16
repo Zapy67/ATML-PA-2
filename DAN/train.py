@@ -89,11 +89,10 @@ def evaluate_accuracy(loader, model, device):
     all_preds = []
     all_labels = []
 
-    with torch.inference_mode():
+    with torch.no_grad():
         for X, Y in loader:
             X, Y = X.to(device), Y.to(device)
-            print(type(model(X)))
-            logits, _ = model(X)  
+            logits= model(X)  
             preds = torch.argmax(logits, dim=1)
             all_preds.append(preds.cpu())
             all_labels.append(Y.cpu())
