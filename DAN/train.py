@@ -92,7 +92,7 @@ def evaluate_accuracy(loader, model, device):
     with torch.inference_mode():
         for X, Y in loader:
             X, Y = X.to(device), Y.to(device)
-            print(len(model(X)))
+            print(model(X))
             logits = model(X)  
             preds = torch.argmax(logits, dim=1)
             all_preds.append(preds.cpu())
