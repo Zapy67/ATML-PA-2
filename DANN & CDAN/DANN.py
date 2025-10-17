@@ -83,7 +83,7 @@ class DANN(nn.Module):
         # ResNet-50 feature extractor
         self.feature_extractor = resnet
 
-        self.bottleneck = nn.Sequential(nn.Linear(self.feature_extractor.output_dim, 200), nn.ReLU())
+        self.bottleneck = nn.Sequential(nn.Linear(self.feature_extractor.output_dim, bottleneck_dim), nn.BatchNorm1d(bottleneck_dim),nn.ReLU())
         
         # Class Head
         self.class_head = ClassificationHead(

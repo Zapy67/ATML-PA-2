@@ -164,14 +164,14 @@ class CDAN(nn.Module):
         multilinear_output_dim: int = 1024,
         domain_discriminator_dims: list = [1024, 1024, 512],
         use_entropy: bool = False,
-        bottleneck_dim: int = 200
+        bottleneck_dim: int = 256
     ):
         super(CDAN, self).__init__()
         
         # ResNet-50 feature extractor
         self.feature_extractor = resnet
 
-        self.bottleneck = nn.Sequential(nn.Linear(self.feature_extractor.output_dim, bottleneck_dim), nn.ReLU())
+        self.bottleneck = nn.Sequential(nn.Linear(self.feature_extractor.output_dim, bottleneck_dim), nn.BatchNorm1d(bottleneck_dim),nn.ReLU())
         
         # Label predictor
         self.class_head = ClassificationHead(
