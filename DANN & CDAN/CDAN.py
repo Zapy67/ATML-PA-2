@@ -309,8 +309,8 @@ class CDANTrainer:
             'train_total_loss': [],
             'train_class_acc': [],
             'train_domain_acc': [],
-            'val_class_loss': [],
-            'val_class_acc': []
+            'target_class_loss': [],
+            'target_class_acc': []
         }
 
     @staticmethod
