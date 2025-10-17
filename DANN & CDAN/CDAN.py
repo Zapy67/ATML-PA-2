@@ -415,7 +415,7 @@ class CDANTrainer:
         else:
             d_loss = d_loss_src + d_loss_tgt
 
-        total_loss = class_loss + 2.0*d_loss
+        total_loss = class_loss + 1.5*d_loss
         total_loss.backward()
         if self.max_grad_norm:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
