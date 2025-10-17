@@ -81,8 +81,7 @@ class DANN(nn.Module):
         
         # ResNet-50 feature extractor (frozen by default)
         self.feature_extractor = ResNet50FeatureExtractor(
-            pretrained=pretrained,
-            freeze=freeze_backbone
+            pretrained=pretrained
         )
         
         # Class Head
