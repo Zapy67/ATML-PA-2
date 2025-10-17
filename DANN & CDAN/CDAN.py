@@ -162,7 +162,7 @@ class CDAN(nn.Module):
         resnet: nn.Module,
         class_head_dims: list = None,
         multilinear_output_dim: int = 1024,
-        domain_discriminator_dims: list = [1024, 1024, 512, 256],
+        domain_discriminator_dims: list = [4096, 2048, 1024, 128],
         use_entropy: bool = False,
         bottleneck_dim: int = 256
     ):
@@ -172,7 +172,6 @@ class CDAN(nn.Module):
         self.feature_extractor = resnet
 
         self.bottleneck = nn.Sequential(
-            nn.Linear(self.feature_extractor.output_dim, 2*bottleneck_dim), nn.BatchNorm1d(2*bottleneck_dim),nn.ReLU(),
             nn.Linear(2*bottleneck_dim, bottleneck_dim), nn.BatchNorm1d(bottleneck_dim),nn.ReLU(),
             )
         
