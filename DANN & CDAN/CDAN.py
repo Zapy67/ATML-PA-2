@@ -162,7 +162,7 @@ class CDAN(nn.Module):
         resnet: nn.Module,
         class_head_dims: list = None,
         multilinear_output_dim: int = 1024,
-        domain_discriminator_dims: list = [1024, 512, 128],
+        domain_discriminator_dims: list = [1024, 1024, 512],
         use_entropy: bool = False
     ):
         super(CDAN, self).__init__()
@@ -295,10 +295,10 @@ class CDANTrainer:
         
         # Optimizer
         self.optimizer = torch.optim.Adam([
-            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.1},
+            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.02},
             {'params': model.class_head.parameters(), 'lr': learning_rate},
             {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
-            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
+            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate * 1.2},
         ], weight_decay=weight_decay)
 
         
