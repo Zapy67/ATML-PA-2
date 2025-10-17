@@ -88,7 +88,7 @@ class ConditionalDomainDiscriminator(nn.Module):
     Predicts whether features come from source (0) or target (1) domain,
     conditioned on the classifier's predictions.
     """
-    def __init__(self, input_dim: int, hidden_dims: list = [1024, 512, 256, 128]):
+    def __init__(self, input_dim: int, hidden_dims: list = [1024, 512, 128]):
         super(ConditionalDomainDiscriminator, self).__init__()
         
         layers = []
@@ -162,7 +162,7 @@ class CDAN(nn.Module):
         resnet: nn.Module,
         class_head_dims: list = None,
         multilinear_output_dim: int = 1024,
-        domain_discriminator_dims: list = [1024, 1024],
+        domain_discriminator_dims: list = [1024, 512, 128],
         use_entropy: bool = False
     ):
         super(CDAN, self).__init__()
@@ -398,7 +398,9 @@ class CDANTrainer:
             metrics_epoch = {k: [] for k in ['class_loss', 'domain_loss', 'total_loss', 'class_acc', 'domain_acc']}
 
             target_iter = iter(target_loader)
-            for batch in tqdm(source_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
+            pbar = tqdm(source_loader, desc=f'Epoch {epoch+1}/{num_epochs}') if verbose else source_loader
+
+            for batch in pbar:
                 s_imgs, s_labels, _ = self._unpack_batch(batch)
                 try:
                     t_batch = next(target_iter)
@@ -413,6 +415,14 @@ class CDANTrainer:
                 for k, v in step_metrics.items():
                     metrics_epoch[k].append(v)
 
+                if verbose:
+                    pbar.set_postfix({
+                        'cls_loss': f"{step_metrics['class_loss']:.4f}",
+                        'dom_loss': f"{step_metrics['domain_loss']:.4f}",
+                        'cls_acc': f"{step_metrics['class_acc']:.4f}",
+                        'alpha': f"{alpha:.4f}"
+                    })
+                
             for k in metrics_epoch:
                 self.history[f"train_{k}"].append(np.mean(metrics_epoch[k]))
 
