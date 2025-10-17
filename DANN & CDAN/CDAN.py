@@ -88,7 +88,7 @@ class ConditionalDomainDiscriminator(nn.Module):
     Predicts whether features come from source (0) or target (1) domain,
     conditioned on the classifier's predictions.
     """
-    def __init__(self, input_dim: int, hidden_dims: list = [1024, 1024]):
+    def __init__(self, input_dim: int, hidden_dims: list = [1024, 512, 256, 128]):
         super(ConditionalDomainDiscriminator, self).__init__()
         
         layers = []
@@ -98,7 +98,7 @@ class ConditionalDomainDiscriminator(nn.Module):
             layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
                 nn.LayerNorm(hidden_dim),
-                nn.ReLU(inplace=True),
+                nn.LeakyReLU(0.2, inplace=True),
                 nn.Dropout(0.5)
             ])
             prev_dim = hidden_dim
@@ -323,12 +323,16 @@ class CDANTrainer:
         self.optimizer.zero_grad()
 
         s_imgs, s_labels, t_imgs = s_imgs.to(self.device), s_labels.to(self.device), t_imgs.to(self.device)
+
+        batch_s = s_imgs.size(0)
+        batch_t = t_imgs.size(0)
+
         domain_src = torch.zeros(s_imgs.size(0), dtype=torch.long, device=self.device)
         domain_tgt = torch.ones(t_imgs.size(0), dtype=torch.long, device=self.device)
 
         # Forward
         s_class, s_domain, _ = self.model(s_imgs, alpha)
-        _, t_domain, _ = self.model(t_imgs, alpha)
+        t_class, t_domain, _ = self.model(t_imgs, alpha)
 
         # Losses
         class_loss = self.class_criterion(s_class, s_labels)
@@ -337,12 +341,15 @@ class CDANTrainer:
 
         if self.model.use_entropy:
             weights_src = self.model.entropy_weighting(s_class)
-            weights_tgt = self.model.entropy_weighting(_)
-            d_loss = torch.mean(weights_src * d_loss_src) + torch.mean(weights_tgt * d_loss_tgt)
+            weights_tgt = self.model.entropy_weighting(t_class)
+            all_domain_losses = torch.cat([d_loss_src, d_loss_tgt], dim=0)
+            all_weights = torch.cat([weights_src, weights_tgt], dim=0)
+            norm_weights = all_weights / (torch.sum(all_weights) + 1e-12)
+            d_loss = torch.sum(norm_weights * all_domain_losses)
         else:
             d_loss = d_loss_src + d_loss_tgt
 
-        total_loss = class_loss + d_loss
+        total_loss = class_loss + 2.0*d_loss
         total_loss.backward()
         if self.max_grad_norm:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
