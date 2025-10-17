@@ -220,7 +220,7 @@ class CDAN(nn.Module):
         """
         # Extract features using ResNet-50
         features = self.feature_extractor(x)
-        feats = self.bottleneck(feats)
+        features = self.bottleneck(features)
         
         # Predict class labels
         class_output = self.class_head(features)
