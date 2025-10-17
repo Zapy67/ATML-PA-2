@@ -295,7 +295,7 @@ class CDANTrainer:
         
         # Optimizer
         self.optimizer = torch.optim.Adam([
-            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.5},
+            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.1},
             {'params': model.class_head.parameters(), 'lr': learning_rate},
             {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
             {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
@@ -417,7 +417,7 @@ class CDANTrainer:
         else:
             d_loss = d_loss_src + d_loss_tgt
 
-        total_loss = class_loss + 2.0*d_loss
+        total_loss = class_loss + d_loss
         total_loss.backward()
         if self.max_grad_norm:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
