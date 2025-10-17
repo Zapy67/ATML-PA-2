@@ -76,6 +76,7 @@ class DANN(nn.Module):
         pretrained: bool = True,
         class_head_dims: list = None,
         domain_discriminator_dims: list = [1024, 512, 128],
+        bottleneck_dim: int = 200
     ):
         super(DANN, self).__init__()
         
@@ -86,9 +87,9 @@ class DANN(nn.Module):
         
         # Class Head
         self.class_head = ClassificationHead(
-            200,
-            num_classes,
-            class_head_dims
+            input_dim=bottleneck_dim,
+            num_classes=num_classes,
+            hidden_dims=class_head_dims
         )
         
         # Gradient reversal layer
@@ -96,8 +97,8 @@ class DANN(nn.Module):
         
         # Domain discriminator
         self.domain_discriminator = DomainDiscriminator(
-            self.feature_extractor.output_dim,
-            domain_discriminator_dims
+            input_dim=bottleneck_dim,
+            hidden_dims=domain_discriminator_dims
         )
     
     def forward(self, x, alpha: Optional[float] = None):
@@ -121,10 +122,8 @@ class DANN(nn.Module):
         if alpha is not None:
             self.grl.set_lambda(alpha)
 
-
         reversed_feats = self.grl(feats)
         domain_logits = self.domain_discriminator(reversed_feats)
-
 
         return class_logits, domain_logits, feats
     
