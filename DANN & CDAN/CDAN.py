@@ -303,10 +303,10 @@ class CDANTrainer:
         
         # Optimizer
         self.optimizer = torch.optim.Adam([
-            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.01},
-            {'params': model.bottleneck.parameters(), 'lr': learning_rate * 0.5},
-            {'params': model.class_head.parameters(), 'lr': learning_rate * 0.5},
-            {'params': model.multilinear_map.parameters(), 'lr': learning_rate * 0.5},
+            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.1},
+            {'params': model.bottleneck.parameters(), 'lr': learning_rate},
+            {'params': model.class_head.parameters(), 'lr': learning_rate},
+            {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
             {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
         ], weight_decay=weight_decay)
 
@@ -469,9 +469,27 @@ class CDANTrainer:
             result['features'] = torch.cat(feats).numpy()
         return result
 
-    def train(self, source_loader, target_loader, num_epochs, verbose=True):
+    def train(self, source_loader, target_loader, num_epochs, verbose=True, discriminator_warmup_epochs=3):
         for epoch in range(num_epochs):
             alpha = compute_lambda_schedule(epoch, num_epochs, self.gamma)
+            if epoch < discriminator_warmup_epochs:
+                # Warmup phase: freeze feature extractor, bottleneck, classifier, multilinear
+                for p in self.model.feature_extractor.parameters():
+                    p.requires_grad = False
+                for p in self.model.bottleneck.parameters():
+                    p.requires_grad = False
+                for p in self.model.class_head.parameters():
+                    p.requires_grad = False
+                for p in self.model.multilinear_map.parameters():
+                    p.requires_grad = False
+                for p in self.model.domain_discriminator.parameters():
+                    p.requires_grad = True
+
+            else:
+                # Normal adversarial training phase: unfreeze everything
+                for p in self.model.parameters():
+                    p.requires_grad = True
+
             metrics_epoch = {k: [] for k in ['class_loss', 'domain_loss', 'total_loss', 'class_acc', 'domain_acc']}
 
             target_iter = iter(target_loader)
