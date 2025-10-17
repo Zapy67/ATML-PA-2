@@ -162,7 +162,7 @@ class CDAN(nn.Module):
         resnet: nn.Module,
         class_head_dims: list = None,
         multilinear_output_dim: int = 1024,
-        domain_discriminator_dims: list = [1024, 1024, 512],
+        domain_discriminator_dims: list = [2048, 1024, 512],
         use_entropy: bool = False,
         bottleneck_dim: int = 256
     ):
@@ -299,11 +299,11 @@ class CDANTrainer:
         
         # Optimizer
         self.optimizer = torch.optim.Adam([
-            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.02},
-            {'params': model.bottleneck.parameters(), 'lr': learning_rate},
+            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.1},
+            {'params': model.bottleneck.parameters(), 'lr': learning_rate * 0.1},
             {'params': model.class_head.parameters(), 'lr': learning_rate},
             {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
-            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate * 1.2},
+            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
         ], weight_decay=weight_decay)
 
         
@@ -422,7 +422,7 @@ class CDANTrainer:
         else:
             d_loss = d_loss_src + d_loss_tgt
 
-        total_loss = class_loss + 2.0*d_loss
+        total_loss = class_loss + d_loss
         total_loss.backward()
         if self.max_grad_norm:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
