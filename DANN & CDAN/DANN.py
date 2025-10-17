@@ -35,7 +35,7 @@ class DomainDiscriminator(nn.Module):
     Domain discriminator network for adversarial training
     Predicts whether features come from source (0) or target (1) domain
     """
-    def __init__(self, input_dim: int, hidden_dims: list = None):
+    def __init__(self, input_dim: int, hidden_dims: list = None, num_domains: int = 2):
         super(DomainDiscriminator, self).__init__()
         
         if hidden_dims is None:
@@ -53,7 +53,7 @@ class DomainDiscriminator(nn.Module):
             ])
             prev_dim = hidden_dim
         
-        layers.append(nn.Linear(prev_dim, 2))  # Binary classification
+        layers.append(nn.Linear(prev_dim, num_domains))  # classification
         self.discriminator = nn.Sequential(*layers)
     
     def forward(self, x):
@@ -114,26 +114,28 @@ class DANN(nn.Module):
             domain_output: Domain predictions
             features: Extracted features
         """
-        # Extract features using ResNet-50 
-        features = self.feature_extractor(x)
-        
-        # Predict class labels
-        class_output = self.class_head(features)
-        
-        # Update GRL lambda if provided
+        feats = self.feature_extractor(x)
+
+
+        class_logits = self.class_head(feats)
+
+
         if alpha is not None:
             self.grl.set_lambda(alpha)
-        
-        # Apply gradient reversal and predict domain
-        reversed_features = self.grl(features)
-        domain_output = self.domain_discriminator(reversed_features)
-        
-        return class_output, domain_output, features
+
+
+        reversed_feats = self.grl(feats)
+        domain_logits = self.domain_discriminator(reversed_feats)
+
+
+        return class_logits, domain_logits, feats
     
     def predict(self, x):
         """Predict class labels only (for inference)"""
-        features = self.feature_extractor(x)
-        return self.class_head(features)
+        with torch.no_grad():
+            feats = self.feature_extractor(x)
+            logits = self.class_head(feats)
+            return torch.argmax(logits, dim=1)
     
     # def unfreeze_backbone(self):
     #     """Unfreeze ResNet-50 backbone for fine-tuning"""
@@ -160,8 +162,9 @@ def compute_lambda_schedule(epoch: int, max_epochs: int, gamma: float = 10) -> f
     Returns:
         lambda value
     """
-    p = float(epoch) / max_epochs
-    return 2. / (1. + np.exp(-gamma * p)) - 1.
+    import math
+    p = float(epoch) / float(max(1, max_epochs))
+    return 2.0 / (1.0 + math.exp(-gamma * p)) - 1.0
 
 
 # ============================================================================
@@ -178,11 +181,13 @@ class DANNTrainer:
         device: torch.device,
         learning_rate: float = 1e-3,
         weight_decay: float = 5e-4,
-        gamma: float = 10.0
+        gamma: float = 10.0,
+        max_grad_norm: Optional[float] = None
     ):
         self.model = model.to(device)
         self.device = device
         self.gamma = gamma
+        self.max_grad_norm = max_grad_norm
         
         # Optimizers
         self.optimizer = torch.optim.Adam(
@@ -227,82 +232,52 @@ class DANNTrainer:
         
         return imgs, labels, domains
     
-    def train_step(
-        self,
-        source_data: torch.Tensor,
-        source_labels: torch.Tensor,
-        target_data: torch.Tensor,
-        alpha: float
-    ) -> Dict[str, float]:
-        """
-        Single training step for DANN
-        
-        Args:
-            source_data: Source domain data
-            source_labels: Source domain labels
-            target_data: Target domain data
-            alpha: Current lambda value for gradient reversal
-        
-        Returns:
-            Dictionary with loss and accuracy metrics
-        """
+    def train_step(self, source_imgs: torch.Tensor, source_labels: torch.Tensor, target_imgs: torch.Tensor, alpha: float) -> Dict[str, float]:
         self.model.train()
         self.optimizer.zero_grad()
 
-        assert source_data.dim() == 4, f"Expected 4D source_data, got {source_data.dim()}D"
-        assert target_data.dim() == 4, f"Expected 4D target_data, got {target_data.dim()}D"
-        assert source_labels.dim() == 1, f"Expected 1D source_labels, got {source_labels.dim()}D"
-        assert source_data.size(0) == source_labels.size(0), \
-            f"Batch size mismatch: source_data={source_data.size(0)}, source_labels={source_labels.size(0)}"
-                
-        # move
-        source_data = source_data.to(self.device)
+        # move to device
+        source_imgs = source_imgs.to(self.device)
         source_labels = source_labels.to(self.device)
-        target_data = target_data.to(self.device)
+        target_imgs = target_imgs.to(self.device)
 
-        # domain labels for domain classifier: 0 = source, 1 = target
-        domain_labels_source = torch.zeros(source_data.size(0), dtype=torch.long, device=self.device)
-        domain_labels_target = torch.ones(target_data.size(0), dtype=torch.long, device=self.device)
+        # domain labels
+        domain_src = torch.zeros(source_imgs.size(0), dtype=torch.long, device=self.device)
+        domain_tgt = torch.ones(target_imgs.size(0), dtype=torch.long, device=self.device)
 
         # forward
-        class_out_s, domain_out_s, _ = self.model(source_data, alpha)
-        _, domain_out_t, _ = self.model(target_data, alpha)
-
-        assert class_out_s.size(0) == source_data.size(0), \
-            f"Class output batch size mismatch: {class_out_s.size(0)} != {source_data.size(0)}"
-        assert domain_out_s.size() == (source_data.size(0), 2), \
-            f"Domain output shape mismatch: {domain_out_s.size()} != ({source_data.size(0)}, 2)"
-        assert domain_out_t.size() == (target_data.size(0), 2), \
-            f"Domain output shape mismatch: {domain_out_t.size()} != ({target_data.size(0)}, 2)"
-
+        class_out_s, domain_out_s, _ = self.model(source_imgs, alpha)
+        _, domain_out_t, _ = self.model(target_imgs, alpha)
 
         # losses
         class_loss = self.class_criterion(class_out_s, source_labels)
-        dom_loss_s = self.domain_criterion(domain_out_s, domain_labels_source)
-        dom_loss_t = self.domain_criterion(domain_out_t, domain_labels_target)
+        dom_loss_s = self.domain_criterion(domain_out_s, domain_src)
+        dom_loss_t = self.domain_criterion(domain_out_t, domain_tgt)
         domain_loss = dom_loss_s + dom_loss_t
         total_loss = class_loss + domain_loss
 
         total_loss.backward()
+        if self.max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
         self.optimizer.step()
-        
-        # compute accuracies
+
+        # metrics
         with torch.no_grad():
             class_pred = torch.argmax(class_out_s, dim=1)
             class_acc = (class_pred == source_labels).float().mean().item()
 
             dom_pred_s = torch.argmax(domain_out_s, dim=1)
             dom_pred_t = torch.argmax(domain_out_t, dim=1)
-            dom_acc_s = (dom_pred_s == domain_labels_source).float().mean().item()
-            dom_acc_t = (dom_pred_t == domain_labels_target).float().mean().item()
+            dom_acc_s = (dom_pred_s == domain_src).float().mean().item()
+            dom_acc_t = (dom_pred_t == domain_tgt).float().mean().item()
             dom_acc = 0.5 * (dom_acc_s + dom_acc_t)
 
         return {
-            'class_loss': class_loss.item(),
-            'domain_loss': domain_loss.item(),
-            'total_loss': total_loss.item(),
-            'class_acc': class_acc,
-            'domain_acc': dom_acc
+        'class_loss': float(class_loss.item()),
+        'domain_loss': float(domain_loss.item()),
+        'total_loss': float(total_loss.item()),
+        'class_acc': float(class_acc),
+        'domain_acc': float(dom_acc)
         }
     
     def evaluate_on_target(self, target_loader: torch.utils.data.DataLoader, return_features: bool = False):
@@ -314,7 +289,7 @@ class DANNTrainer:
         y_true = []
         y_pred = []
         losses = []
-        features_list = []
+        feats_list = []
 
         with torch.no_grad():
             pbar = tqdm(target_loader, desc="Evaluating target", leave=False)
@@ -323,29 +298,22 @@ class DANNTrainer:
                 imgs = imgs.to(self.device)
                 labels = labels.to(self.device)
 
-                # Forward: alpha = 0 disables adversarial effect for evaluation
                 out = self.model(imgs, 0.0)
-
-                # Validate output format
-                if not isinstance(out, tuple) or len(out) < 1:
-                    raise ValueError(f"Expected tuple output from model, got {type(out)}")
-                
-                class_logits = out[0]
-                feats = out[2] if len(out) > 2 else None  # Features are 3rd element
-
-                # Validate dimensions
-                assert class_logits.size(0) == imgs.size(0), \
-                    f"Output batch size mismatch: {class_logits.size(0)} != {imgs.size(0)}"
+                if not isinstance(out, tuple):
+                    class_logits = out
+                    feats = None
+                else:
+                    class_logits, _, feats = out
 
                 loss = self.class_criterion(class_logits, labels)
-                losses.append(loss.item())
+                losses.append(float(loss.item()))
 
                 preds = torch.argmax(class_logits, dim=1)
                 y_true.append(labels.cpu())
                 y_pred.append(preds.cpu())
 
                 if return_features and feats is not None:
-                    features_list.append(feats.detach().cpu())
+                    feats_list.append(feats.cpu())
 
         if len(y_true) == 0:
             return {'loss': None, 'accuracy': None, 'y_true': np.array([]), 'y_pred': np.array([]), 'features': None}
@@ -356,8 +324,8 @@ class DANNTrainer:
         acc = float((y_true == y_pred).mean()) if len(y_true) > 0 else None
 
         features_np = None
-        if return_features and len(features_list) > 0:
-            features_np = torch.cat(features_list).numpy()
+        if return_features and len(feats_list) > 0:
+            features_np = torch.cat(feats_list).numpy()
 
         return {
             'loss': avg_loss,
@@ -398,27 +366,27 @@ class DANNTrainer:
             
             # make an iterator for target to pair batches (cycling)
             target_iter = iter(target_loader)
-            
             # Training loop
             pbar = tqdm(source_loader, desc=f'Epoch {epoch+1}/{num_epochs}') if verbose else source_loader
             
             for batch in pbar:
-                # unpack source batch properly
-                source_imgs, source_labels, _ = self._unpack_batch(batch)
+                s_imgs, s_labels, _ = self._unpack_batch(batch)
 
-                # get matching target batch (cycle if needed)
+
                 try:
                     t_batch = next(target_iter)
                 except StopIteration:
                     target_iter = iter(target_loader)
                     t_batch = next(target_iter)
-                target_imgs, _, _ = self._unpack_batch(t_batch)
+
+
+                t_imgs, _, _ = self._unpack_batch(t_batch)
 
                 # match sizes and move to device
-                min_b = min(source_imgs.size(0), target_imgs.size(0))
-                source_imgs_b = source_imgs[:min_b]
-                source_labels_b = source_labels[:min_b]
-                target_imgs_b = target_imgs[:min_b]
+                min_b = min(s_imgs.size(0), t_imgs.size(0))
+                source_imgs_b = s_imgs[:min_b]
+                source_labels_b = s_labels[:min_b]
+                target_imgs_b = t_imgs[:min_b]
 
                 # Move
                 source_imgs_b = source_imgs_b.to(self.device)

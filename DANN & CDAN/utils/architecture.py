@@ -49,7 +49,7 @@ class ResNet50FeatureExtractor(nn.Module):
     Feature extractor using frozen ResNet-50 backbone
     Extracts features from the last layer before classification
     """
-    def __init__(self, pretrained: bool = True, freeze: bool = False):
+    def __init__(self, pretrained: bool = True):
         super(ResNet50FeatureExtractor, self).__init__()
         
         # Load pretrained ResNet-50
@@ -57,14 +57,9 @@ class ResNet50FeatureExtractor(nn.Module):
         
         # Remove the final classification layer
         # ResNet-50 outputs 2048-dimensional features
-        self.features = nn.Sequential(*list(resnet50.children())[:-1])
+        self.backbone = nn.Sequential(*list(resnet50.children())[:-2])
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.output_dim = 2048
-        
-        # Freeze the backbone if specified
-        if freeze:
-            for param in self.features.parameters():
-                param.requires_grad = False
-            self.features.eval()
     
     def forward(self, x):
         """
@@ -73,27 +68,11 @@ class ResNet50FeatureExtractor(nn.Module):
         Returns:
             features: Feature tensor of shape (batch_size, 2048)
         """
-        with torch.set_grad_enabled(self.training and not self._is_frozen()):
-            features = self.features(x)
-            # Flatten the output
-            features = features.view(features.size(0), -1)
-        return features
-    
-    # def _is_frozen(self):
-    #     """Check if the backbone is frozen"""
-    #     return not next(self.features.parameters()).requires_grad
-    
-    # def unfreeze(self):
-    #     """Unfreeze the backbone for fine-tuning"""
-    #     for param in self.features.parameters():
-    #         param.requires_grad = True
-    #     self.features.train()
-    
-    # def freeze(self):
-    #     """Freeze the backbone"""
-    #     for param in self.features.parameters():
-    #         param.requires_grad = False
-    #     self.features.eval()
+        feat_map = self.backbone(x) # (B, C, H, W)
+        pooled = self.global_pool(feat_map) # (B, C, 1, 1)
+        pooled = pooled.view(pooled.size(0), -1) # (B, C)
+        return pooled
+
 
 
 # ============================================================================
