@@ -300,6 +300,7 @@ class CDANTrainer:
         # Optimizer
         self.optimizer = torch.optim.Adam([
             {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.02},
+            {'params': model.bottleneck.parameters(), 'lr': learning_rate},
             {'params': model.class_head.parameters(), 'lr': learning_rate},
             {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
             {'params': model.domain_discriminator.parameters(), 'lr': learning_rate * 1.2},
