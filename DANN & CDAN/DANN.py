@@ -72,17 +72,15 @@ class DANN(nn.Module):
     def __init__(
         self,
         num_classes: int,
+        resnet: nn.Module,
         pretrained: bool = True,
-        freeze_backbone: bool = False,
         class_head_dims: list = None,
         domain_discriminator_dims: list = [1024, 512],
     ):
         super(DANN, self).__init__()
         
         # ResNet-50 feature extractor (frozen by default)
-        self.feature_extractor = ResNet50FeatureExtractor(
-            pretrained=pretrained
-        )
+        self.feature_extractor = resnet
         
         # Class Head
         self.class_head = ClassificationHead(

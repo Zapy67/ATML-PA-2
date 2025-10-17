@@ -10,6 +10,8 @@ import pandas as pd
 import os
 from PIL import Image
 import torch.nn as nn
+from torch.utils.data import DataLoader
+
 
 MEAN = [0.485, 0.456, 0.406]
 STD  = [0.229, 0.224, 0.225]
@@ -51,132 +53,77 @@ class OfficeHomeDataset(torch.utils.data.Dataset):
 
         return image, self.class_to_idx[label]
 
-def _truncate_resnet(model, layer_name):
-        layers = nn.Sequential()
-        for name, module in model.named_children():
-            layers.add_module( name, module)
-            if name == layer_name:
-                break
-        return layers
+class RestWrapper(nn.Module):
+    """Wrap the `truncate_from(resnet, 'layer3')` module so it returns (B, D)
+       and exposes output_dim attribute expected by DANN class."""
+    def __init__(self, rest_module, output_dim=2048):
+        super().__init__()
+        self.rest = rest_module
+        self.output_dim = output_dim
 
-def _truncate_resnet_from(model, layer_name):
-        seen = False
-        layers = nn.Sequential()
-        for name, module in model.named_children():
-            if seen:
-                layers.add_module( name, module)
-            if name == layer_name:
-                seen = True
-        return layers
+    def forward(self, featmap):
+        # featmap: (B, C, H, W)  -> rest likely includes layer4 + avgpool => (B,C,1,1)
+        out = self.rest(featmap)
+        # If rest returns (B, C, 1, 1) or (B, C), flatten to (B, D)
+        if out.dim() == 4:
+            out = torch.flatten(out, 1)
+        elif out.dim() == 2:
+            # already flattened
+            pass
+        else:
+            # keep guard
+            out = out.view(out.size(0), -1)
+        return out
 
 class FeatureTensorDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, base_model, layer_name="layer3", device="cpu", batch_size=32):
-        self.dataset = dataset
+    def __init__(self, dataset, base_model, layer_name="layer3", device="cpu", batch_size=32, num_workers=2):
         self.device = device
         self.layer_name = layer_name
 
-        base_model.eval()
-        self.feature_extractor = _truncate_resnet(base_model, layer_name).to(device)
-        self.feature_extractor.eval()        
-        self.x, self.y = self._precompute_features(dataset, batch_size)
+        # trunk: images -> layer3 feature maps (B, C, H, W)
+        self.trunk = truncate_up_to(base_model, layer_name).to(device).eval()
 
-        self.truncated_model = _truncate_resnet_from(base_model, layer_name).to(device)
-
-    
-    def _precompute_features(self, dataset, batch_size):
-        loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        feats, labels = [], []
-
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+        feats, labs = [], []
         with torch.inference_mode():
-            for imgs, lbls in tqdm(loader, desc=f"Precomputing up to {self.layer_name}"):
-                imgs = imgs.to(self.device)
-                outputs = self.feature_extractor(imgs)
-                feats.append(outputs.cpu())
-                labels.append(lbls)
-
-        x = torch.cat(feats)
-        y = torch.cat(labels)
-        return x, y
+            for imgs, lbls in tqdm(loader, desc=f"Precomputing up to {layer_name}"):
+                imgs = imgs.to(device)
+                fmaps = self.trunk(imgs)           # (B, C, H, W)
+                feats.append(fmaps.cpu())          # keep on CPU
+                labs.append(lbls)
+        self.x = torch.cat(feats)   # shape (N, C, H, W) on CPU
+        self.y = torch.cat(labs)    # shape (N,)
 
     def __len__(self):
         return len(self.x)
 
     def __getitem__(self, idx):
+        # Return CPU tensors; DataLoader will collate them and move to device if needed.
         return self.x[idx], self.y[idx]
 
-class DeepLakeWrapper(Dataset):
-    """
-    Wrapper for OfficeHome DeepLake dataset.
+def truncate_up_to(resnet: nn.Module, layer_name: str) -> nn.Sequential:
+    seq = nn.Sequential()
+    for name, module in resnet.named_children():
+        seq.add_module(name, module)
+        if name == layer_name:
+            break
+    return seq
 
-    - Optionally pass domain_map (e.g. {0: "RealWorld", 1: "Product", 2: "Art", 3: "Clipart"})
-      to get human-readable names if needed.
-    """
+def truncate_from(resnet: nn.Module, layer_name: str) -> nn.Sequential:
+    seen = False
+    seq = nn.Sequential()
+    for name, module in resnet.named_children():
+        if seen and name != 'fc':    # exclude final fc
+            seq.add_module(name, module)
+        if name == layer_name:
+            seen = True
+    return seq
 
-    def __init__(
-        self,
-        ds,
-        img_size: int = 224,
-        domain_map: Optional[Dict[int, str]] = None
-    ):
-        self.ds = ds
-        self.domain_map = domain_map
-        self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize((img_size, img_size)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=MEAN, std=STD),
-        ])
-
-    def __len__(self):
-        return len(self.ds)
-    
-    def _to_np(self, x):
-        # Convert tensor-like to numpy safely
-        try:
-            if hasattr(x, "numpy"):
-                return x.numpy()
-        except Exception:
-            pass
-        return np.asarray(x)
-
-    def __getitem__(self, idx):
-        sample = self.ds[int(idx)]
-
-        # --- image ---
-        if 'images' in sample:
-            img_arr = self._to_np(sample['images'])
-        elif 'image' in sample:
-            img_arr = self._to_np(sample['image'])
-        else:
-            raise KeyError("Expected sample to have 'images' or 'image' key.")
-
-        # normalize shape: if CHW -> HWC; if grayscale -> stack to 3 channels
-        img_arr = np.asarray(img_arr)
-        if img_arr.ndim == 3 and img_arr.shape[0] in (1,3) and img_arr.shape[0] != img_arr.shape[2]:
-            # CHW -> HWC
-            img_arr = np.transpose(img_arr, (1, 2, 0))
-        if img_arr.ndim == 2:
-            img_arr = np.stack([img_arr]*3, axis=-1)
-        img_arr = img_arr.astype(np.uint8)
-
-        img_tensor = self.transform(img_arr)
-
-        # --- label ---
-        if 'domain_objects' in sample:
-            lbl = self._to_np(sample['domain_objects'])
-        elif 'label' in sample:
-            lbl = self._to_np(sample['label'])
-        elif 'target' in sample:
-            lbl = self._to_np(sample['target'])
-        else:
-            raise KeyError("Expected sample to have 'domain_objects' or 'label'/'target' key for class label.")
-        # extract scalar
-        lbl = int(np.asarray(lbl).reshape(-1)[0])
-
-        # --- domain id (OfficeHome specific) ---
-        if 'domain_categories' not in sample:
-            raise KeyError("Expected sample to have 'domain_categories' key for domain id (OfficeHome).")
-        dom = self._to_np(sample['domain_categories'])
-        dom = int(np.asarray(dom).reshape(-1)[0])
-
-        return img_tensor, lbl, dom
+def freeze_until(resnet: nn.Module, layer_name: str):
+    freeze = True
+    for name, module in resnet.named_children():
+        if freeze:
+            for p in module.parameters():
+                p.requires_grad = False
+        if name == layer_name:
+            freeze = False
