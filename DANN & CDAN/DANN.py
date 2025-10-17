@@ -79,7 +79,7 @@ class DANN(nn.Module):
     ):
         super(DANN, self).__init__()
         
-        # ResNet-50 feature extractor (frozen by default)
+        # ResNet-50 feature extractor
         self.feature_extractor = resnet
         
         # Class Head
