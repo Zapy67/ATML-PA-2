@@ -171,7 +171,10 @@ class CDAN(nn.Module):
         # ResNet-50 feature extractor
         self.feature_extractor = resnet
 
-        self.bottleneck = nn.Sequential(nn.Linear(self.feature_extractor.output_dim, bottleneck_dim), nn.BatchNorm1d(bottleneck_dim),nn.ReLU())
+        self.bottleneck = nn.Sequential(
+            nn.Linear(self.feature_extractor.output_dim, 2*bottleneck_dim), nn.BatchNorm1d(2*bottleneck_dim),nn.ReLU(),
+            nn.Linear(2*bottleneck_dim, bottleneck_dim), nn.BatchNorm1d(bottleneck_dim),nn.ReLU(),
+            )
         
         # Label predictor
         self.class_head = ClassificationHead(
