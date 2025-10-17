@@ -303,10 +303,10 @@ class CDANTrainer:
         
         # Optimizer
         self.optimizer = torch.optim.Adam([
-            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.1},
-            {'params': model.bottleneck.parameters(), 'lr': learning_rate * 0.1},
-            {'params': model.class_head.parameters(), 'lr': learning_rate},
-            {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
+            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.01},
+            {'params': model.bottleneck.parameters(), 'lr': learning_rate * 0.5},
+            {'params': model.class_head.parameters(), 'lr': learning_rate * 0.5},
+            {'params': model.multilinear_map.parameters(), 'lr': learning_rate * 0.5},
             {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
         ], weight_decay=weight_decay)
 
