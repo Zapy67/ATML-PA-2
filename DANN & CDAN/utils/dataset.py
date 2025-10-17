@@ -86,7 +86,7 @@ class FeatureTensorDataset(torch.utils.data.Dataset):
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
         feats, labs = [], []
         with torch.inference_mode():
-            for imgs, lbls in tqdm(loader, desc=f"Precomputing up to {layer_name}"):
+            for imgs, lbls in tqdm.tqdm(loader, desc=f"Precomputing up to {layer_name}"):
                 imgs = imgs.to(device)
                 fmaps = self.trunk(imgs)           # (B, C, H, W)
                 feats.append(fmaps.cpu())          # keep on CPU
