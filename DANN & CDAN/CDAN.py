@@ -292,13 +292,15 @@ class CDANTrainer:
         weight_decay: float = 1e-4,
         gamma: float = 10.0,
         max_grad_norm: Optional[float] = None,
-        label_smoothing = 0.1
+        label_smoothing = 0.1,
+        dl_weight: int = 1.0
     ):
         self.model = model.to(device)
         self.device = device
         self.gamma = gamma
         self.max_grad_norm = max_grad_norm
         self.label_smoothing = label_smoothing
+        self.dl_weight = dl_weight
         
         # Optimizer
         self.optimizer = torch.optim.Adam([
@@ -425,7 +427,7 @@ class CDANTrainer:
         else:
             d_loss = d_loss_src + d_loss_tgt
 
-        total_loss = class_loss + d_loss
+        total_loss = class_loss + self.dl_weight * d_loss
         total_loss.backward()
         if self.max_grad_norm:
             nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
