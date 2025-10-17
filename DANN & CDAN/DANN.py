@@ -75,7 +75,7 @@ class DANN(nn.Module):
         resnet: nn.Module,
         pretrained: bool = True,
         class_head_dims: list = None,
-        domain_discriminator_dims: list = [1024, 512],
+        domain_discriminator_dims: list = [1024, 512, 128],
     ):
         super(DANN, self).__init__()
         
