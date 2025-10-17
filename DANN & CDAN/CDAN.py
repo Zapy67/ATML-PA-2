@@ -142,7 +142,7 @@ class EntropyWeighting(nn.Module):
         # Compute weights: 1 + exp(-entropy)
         weights = 1.0 + torch.exp(-entropy)
         
-        return weights
+        return weights/weights.mean()
 
 
 # ============================================================================
@@ -284,12 +284,14 @@ class CDANTrainer:
         learning_rate: float = 1e-3,
         weight_decay: float = 1e-4,
         gamma: float = 10.0,
-        max_grad_norm: Optional[float] = None
+        max_grad_norm: Optional[float] = None,
+        label_smoothing = 0.1
     ):
         self.model = model.to(device)
         self.device = device
         self.gamma = gamma
         self.max_grad_norm = max_grad_norm
+        self.label_smoothing = label_smoothing
         
         # Optimizer
         self.optimizer = torch.optim.Adam(
@@ -313,6 +315,74 @@ class CDANTrainer:
             'target_class_acc': []
         }
 
+    def _smooth_domain_labels(self, domain_labels: torch.Tensor) -> torch.Tensor:
+        """
+        Apply label smoothing to domain labels.
+        
+        Args:
+            domain_labels: Hard labels (0 for source, 1 for target)
+        
+        Returns:
+            Smoothed labels as one-hot vectors with smoothing applied
+        """
+        if self.label_smoothing == 0.0:
+            return domain_labels
+        
+        # Create one-hot encoding
+        num_classes = 2  # binary domain classification
+        batch_size = domain_labels.size(0)
+        
+        # Initialize with smoothing value
+        smooth_labels = torch.full(
+            (batch_size, num_classes),
+            self.label_smoothing / num_classes,
+            device=self.device
+        )
+        
+        # Set target class to (1 - smoothing + smoothing/num_classes)
+        smooth_labels.scatter_(
+            1, 
+            domain_labels.unsqueeze(1), 
+            1.0 - self.label_smoothing + self.label_smoothing / num_classes
+        )
+        
+        return smooth_labels
+
+    def _compute_smooth_domain_loss(
+        self, 
+        domain_output: torch.Tensor, 
+        domain_labels: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Compute domain loss with label smoothing.
+        
+        Args:
+            domain_output: Domain discriminator logits (batch_size, 2)
+            domain_labels: Hard domain labels (batch_size,)
+        
+        Returns:
+            Loss value (scalar or per-sample for entropy weighting)
+        """
+        if self.label_smoothing == 0.0:
+            # No smoothing: use standard CrossEntropyLoss
+            return self.domain_criterion(domain_output, domain_labels)
+        
+        # Apply label smoothing
+        smooth_labels = self._smooth_domain_labels(domain_labels)
+        
+        # Compute log probabilities
+        log_probs = torch.nn.functional.log_softmax(domain_output, dim=1)
+        
+        # Compute loss: -sum(smooth_labels * log_probs)
+        loss = -torch.sum(smooth_labels * log_probs, dim=1)
+        
+        # Return mean or per-sample loss depending on entropy weighting
+        if self.model.use_entropy:
+            return loss  # per-sample for entropy weighting
+        else:
+            return loss.mean()
+
+
     @staticmethod
     def _unpack_batch(batch):
         imgs, labels = batch[:2]
@@ -324,9 +394,6 @@ class CDANTrainer:
 
         s_imgs, s_labels, t_imgs = s_imgs.to(self.device), s_labels.to(self.device), t_imgs.to(self.device)
 
-        batch_s = s_imgs.size(0)
-        batch_t = t_imgs.size(0)
-
         domain_src = torch.zeros(s_imgs.size(0), dtype=torch.long, device=self.device)
         domain_tgt = torch.ones(t_imgs.size(0), dtype=torch.long, device=self.device)
 
@@ -336,16 +403,15 @@ class CDANTrainer:
 
         # Losses
         class_loss = self.class_criterion(s_class, s_labels)
-        d_loss_src = self.domain_criterion(s_domain, domain_src)
-        d_loss_tgt = self.domain_criterion(t_domain, domain_tgt)
+        d_loss_src = self._compute_smooth_domain_loss(s_domain, domain_src)
+        d_loss_tgt = self._compute_smooth_domain_loss(t_domain, domain_tgt)
+        # d_loss_src = self.domain_criterion(s_domain, domain_src)
+        # d_loss_tgt = self.domain_criterion(t_domain, domain_tgt)
 
         if self.model.use_entropy:
             weights_src = self.model.entropy_weighting(s_class)
             weights_tgt = self.model.entropy_weighting(t_class)
-            all_domain_losses = torch.cat([d_loss_src, d_loss_tgt], dim=0)
-            all_weights = torch.cat([weights_src, weights_tgt], dim=0)
-            norm_weights = all_weights / (torch.sum(all_weights) + 1e-12)
-            d_loss = torch.sum(norm_weights * all_domain_losses)
+            d_loss = torch.mean(weights_src * d_loss_src) + torch.mean(weights_tgt * d_loss_tgt)
         else:
             d_loss = d_loss_src + d_loss_tgt
 
