@@ -307,7 +307,7 @@ class CDANTrainer:
             {'params': model.bottleneck.parameters(), 'lr': learning_rate},
             {'params': model.class_head.parameters(), 'lr': learning_rate},
             {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
-            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
+            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate * 10},
         ], weight_decay=weight_decay)
 
         
