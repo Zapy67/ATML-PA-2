@@ -81,10 +81,12 @@ class DANN(nn.Module):
         
         # ResNet-50 feature extractor
         self.feature_extractor = resnet
+
+        self.bottleneck = nn.Sequential(nn.Linear(self.feature_extractor.output_dim, 200), nn.ReLU())
         
         # Class Head
         self.class_head = ClassificationHead(
-            self.feature_extractor.output_dim,
+            200,
             num_classes,
             class_head_dims
         )
@@ -112,10 +114,9 @@ class DANN(nn.Module):
             features: Extracted features
         """
         feats = self.feature_extractor(x)
-
+        feats = self.bottleneck(feats)
 
         class_logits = self.class_head(feats)
-
 
         if alpha is not None:
             self.grl.set_lambda(alpha)
