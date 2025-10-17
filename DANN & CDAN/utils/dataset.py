@@ -16,10 +16,15 @@ STD  = [0.229, 0.224, 0.225]
 
 class OfficeHomeDataset(torch.utils.data.Dataset):    
     def __init__(self, root_dir, csv_file, domains, transform=None):
-        self.df = pd.read_csv(csv_file)       
+        self.df = pd.read_csv(csv_file)
+        print(self.df.shape)
+        print(self.df.head())
+
         # Convert Windows paths to Kaggle-compatible paths
         self.df['domain'] = self.df['name'].apply(lambda x: x.split('/')[2])
-        self.df['image']  = self.df['name'].apply(lambda x: os.path.join(root_dir, x.split('/', 2)[-1].strip()))
+        self.df['image'] = self.df['name'].apply(
+            lambda x: x.replace("D:/Dataset10072016", root_dir).strip()
+        )
         self.df['label']  = self.df['name'].apply(lambda x: x.split('/')[3])
        
         self.df = self.df[self.df['domain'].isin(domains)].reset_index(drop=True)
