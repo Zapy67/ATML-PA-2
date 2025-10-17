@@ -251,7 +251,7 @@ class DANNTrainer:
         dom_loss_s = self.domain_criterion(domain_out_s, domain_src)
         dom_loss_t = self.domain_criterion(domain_out_t, domain_tgt)
         domain_loss = dom_loss_s + dom_loss_t
-        total_loss = class_loss + domain_loss
+        total_loss = class_loss + 2.0*domain_loss
 
         total_loss.backward()
         if self.max_grad_norm is not None:
