@@ -162,7 +162,7 @@ class CDAN(nn.Module):
         resnet: nn.Module,
         class_head_dims: list = None,
         multilinear_output_dim: int = 1024,
-        domain_discriminator_dims: list = [2048, 1024, 512],
+        domain_discriminator_dims: list = [1024, 1024, 512, 256],
         use_entropy: bool = False,
         bottleneck_dim: int = 256
     ):
