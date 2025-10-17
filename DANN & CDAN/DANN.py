@@ -493,13 +493,27 @@ class DANNTrainer:
             plt.figure(figsize=(6, 5))
             sns.heatmap(
                 cm_disp,
-                annot=True,
-                fmt=".2f" if normalize_cm else "d",
+                annot=False,
+                # fmt=".2f" if normalize_cm else "d",
                 cmap="Blues",
-                xticklabels=class_names if class_names else labels_range,
-                yticklabels=class_names if class_names else labels_range,
+                xticklabels=False,
+                yticklabels=False,
             )
             plt.title(f"Confusion Matrix ({name})")
+            plt.xlabel("Predicted")
+            plt.ylabel("True")
+            plt.tight_layout()
+            plt.show()
+
+            conf_sum = np.sum(cm, axis=1)
+            topk_idx = np.argsort(-conf_sum)[:10]
+            cm_topk = cm_disp[topk_idx][:, topk_idx]
+            labels_topk = [class_names[i] for i in topk_idx]
+
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(cm_topk, annot=True, fmt=".2f", cmap="Blues",
+                        xticklabels=labels_topk, yticklabels=labels_topk)
+            plt.title(f"Top-10 Confusion Matrix ({name})")
             plt.xlabel("Predicted")
             plt.ylabel("True")
             plt.tight_layout()
