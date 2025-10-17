@@ -294,11 +294,13 @@ class CDANTrainer:
         self.label_smoothing = label_smoothing
         
         # Optimizer
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=learning_rate,
-            weight_decay=weight_decay
-        )
+        self.optimizer = torch.optim.Adam([
+            {'params': model.feature_extractor.parameters(), 'lr': learning_rate * 0.5},
+            {'params': model.class_head.parameters(), 'lr': learning_rate},
+            {'params': model.multilinear_map.parameters(), 'lr': learning_rate},
+            {'params': model.domain_discriminator.parameters(), 'lr': learning_rate},
+        ], weight_decay=weight_decay)
+
         
         # Loss functions
         self.class_criterion = nn.CrossEntropyLoss()
