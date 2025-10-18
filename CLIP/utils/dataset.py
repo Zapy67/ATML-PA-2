@@ -49,12 +49,9 @@ def _truncate_resnet_from(model, layer_name):
         layers = nn.Sequential()
         for name, module in model.named_children():
             if seen:
-                if name == "fc": 
-                    layers.add_module('flatten', torch.nn.Flatten(start_dim=1))
                 layers.add_module( name, module)
             if name == layer_name:
                 seen = True
-       
         return layers
 
 class FeatureTensorDataset(torch.utils.data.Dataset):

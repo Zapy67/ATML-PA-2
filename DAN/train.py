@@ -36,8 +36,8 @@ def train_step(source_loader, target_loader, model, optimizer, loss_fn, accuracy
         X_s, Y_s, X_t = X_s.to(device), Y_s.to(device), X_t.to(device)
         
         optimizer.zero_grad()
-        logits, source_features = model(X_s)
-        _, target_features = model(X_t)
+        logits, source_features = model(X_s, return_features=True)
+        _, target_features = model(X_t, return_features=True)
         
         supervised, scaled_mkmmd = loss_fn(source_features, target_features, logits, Y_s)
         loss = supervised + scaled_mkmmd
@@ -89,13 +89,18 @@ def evaluate_accuracy(loader, model, device):
     all_preds = []
     all_labels = []
 
-    with torch.inference_mode():
+    with torch.no_grad():
         for X, Y in loader:
-            X, Y = X.to(device), Y.to(device)
-            logits,_ = model(X)  
-            preds = torch.argmax(logits, dim=1)
-            all_preds.append(preds.cpu())
-            all_labels.append(Y.cpu())
+            pass
+            # print(X)
+            # print(Y)
+            # X = X.to(device)
+            # Y = Y.to(device)
+
+            # logits= model(X)  
+            # preds = torch.argmax(logits, dim=1)
+            # all_preds.append(preds.cpu())
+            # all_labels.append(Y.cpu())
 
     y_true = torch.cat(all_labels).numpy()
     y_pred = torch.cat(all_preds).numpy()
@@ -122,6 +127,6 @@ def train_workflow(model, src_dataset, tgt_dataset, val_dataset, config, device)
     train(source_loader, target_loader, test_loader, epochs, optimizer, model, loss_fn, accuracy_fn, device)
 
     
-    
+
 
 
