@@ -168,8 +168,10 @@ class GDROTrainer:
         if num_epochs is None:
             num_epochs = self.num_epochs
         if self.train_loaders is None or self.test_items is None:
+            print("Building Dataset and Loaders")
             self.build_datasets_and_loaders()
         if self.model is None:
+            print("Building Model")
             self.build_model()
 
         loaders = self.train_loaders
