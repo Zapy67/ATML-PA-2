@@ -1,0 +1,71 @@
+              precision    recall  f1-score   support
+
+ Alarm_Clock       0.88      0.42      0.57        86
+    Backpack       0.49      0.60      0.54        86
+   Batteries       0.64      0.13      0.22        67
+         Bed       0.62      0.52      0.57        83
+        Bike       0.90      0.75      0.82        92
+      Bottle       0.60      0.65      0.62       110
+      Bucket       0.82      0.38      0.51        72
+  Calculator       0.77      0.86      0.81        73
+    Calendar       0.85      0.68      0.75        68
+     Candles       0.76      0.83      0.79        99
+       Chair       0.47      0.64      0.54        94
+  Clipboards       0.78      0.60      0.68        60
+    Computer       0.33      0.63      0.43        94
+       Couch       0.62      0.40      0.49        65
+    Curtains       0.80      0.73      0.76        77
+   Desk_Lamp       0.39      0.71      0.51        55
+       Drill       0.84      0.54      0.66        50
+      Eraser       0.37      0.18      0.24        39
+   Exit_Sign       0.58      0.87      0.69        78
+         Fan       0.40      0.68      0.51        66
+File_Cabinet       0.62      0.62      0.62        68
+   Flipflops       0.71      0.55      0.62        92
+     Flowers       0.61      0.93      0.74        97
+      Folder       0.56      0.74      0.63        80
+        Fork       0.58      0.12      0.19        60
+     Glasses       0.64      0.78      0.71        69
+      Hammer       0.65      0.49      0.56        74
+      Helmet       0.57      0.35      0.43        84
+      Kettle       0.64      0.69      0.66        67
+    Keyboard       0.90      0.78      0.84        88
+      Knives       0.69      0.25      0.37        71
+  Lamp_Shade       0.70      0.51      0.59        72
+      Laptop       0.74      0.44      0.56        79
+      Marker       0.39      0.43      0.41        46
+     Monitor       0.55      0.71      0.62        85
+         Mop       0.58      0.34      0.43        61
+       Mouse       0.30      0.88      0.45        74
+         Mug       0.70      0.68      0.69        66
+    Notebook       0.45      0.62      0.52        84
+        Oven       0.57      0.39      0.47        61
+         Pan       0.37      0.67      0.48        58
+  Paper_Clip       0.70      0.60      0.65        50
+         Pen       0.50      0.33      0.40        79
+      Pencil       0.49      0.45      0.47        71
+Postit_Notes       0.24      0.49      0.32        53
+     Printer       0.76      0.49      0.59        76
+    Push_Pin       0.50      0.40      0.45        52
+       Radio       0.60      0.04      0.08        71
+Refrigerator       0.76      0.44      0.56        80
+       Ruler       0.79      0.57      0.66        58
+    Scissors       0.72      0.80      0.76        85
+ Screwdriver       0.74      0.36      0.49        55
+       Shelf       0.25      0.19      0.22        57
+        Sink       0.32      0.51      0.39        72
+    Sneakers       0.58      0.91      0.71        85
+        Soda       0.52      0.52      0.52        58
+     Speaker       0.54      0.23      0.32        83
+       Spoon       0.47      0.62      0.53        63
+          TV       0.77      0.20      0.32        83
+       Table       0.34      0.71      0.46        69
+   Telephone       0.79      0.39      0.52        70
+  ToothBrush       0.52      0.56      0.54        59
+        Toys       0.27      0.40      0.32        68
+   Trash_Can       0.68      0.57      0.62        67
+      Webcam       0.62      0.52      0.57        61
+
+    accuracy                           0.55      4675
+   macro avg       0.60      0.54      0.53      4675
+weighted avg       0.61      0.55      0.55      4675
